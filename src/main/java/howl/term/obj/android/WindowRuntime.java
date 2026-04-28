@@ -28,6 +28,15 @@ public final class WindowRuntime {
         return p;
     }
 
+    public android.widget.FrameLayout.LayoutParams leftPanel(android.app.Activity activity, int dp) {
+        final android.widget.FrameLayout.LayoutParams p = new android.widget.FrameLayout.LayoutParams(
+                dp(activity, dp),
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+        );
+        p.gravity = android.view.Gravity.LEFT;
+        return p;
+    }
+
     public void mount(android.widget.FrameLayout parent, android.view.View child, android.widget.FrameLayout.LayoutParams params) {
         parent.addView(child, params);
     }
@@ -40,8 +49,32 @@ public final class WindowRuntime {
         view.setBackgroundColor(argb);
     }
 
+    public void setGone(android.view.View view) {
+        view.setVisibility(android.view.View.GONE);
+    }
+
+    public void setVisible(android.view.View view) {
+        view.setVisibility(android.view.View.VISIBLE);
+    }
+
+    public void setX(android.view.View view, float x) {
+        view.setX(x);
+    }
+
     public void setContent(android.app.Activity activity, android.view.View view) {
         activity.setContentView(view);
+    }
+
+    public void bindTap(android.view.View view, Runnable onTap) {
+        view.setOnClickListener(v -> onTap.run());
+    }
+
+    public void toggleIme(android.app.Activity activity, android.view.View anchor) {
+        final android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+        if (imm == null) return;
+        anchor.requestFocus();
+        imm.toggleSoftInput(android.view.inputmethod.InputMethodManager.SHOW_FORCED, 0);
     }
 
     private int dp(android.app.Activity activity, int value) {

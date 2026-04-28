@@ -1,34 +1,42 @@
 package howl.term;
 
-import howl.term.widget.term_surface.View;
+import howl.term.service.android.WindowRuntime;
+import howl.term.widget.assist_bar.AssistBar;
+import howl.term.widget.nav_bar.NavBar;
+import howl.term.widget.term_surface.Surface;
 
-/** Window lifecycle coordinator. */
+/** Window lifecycle coordinator and widget owner. */
 public final class Window {
-    private final View surface;
-    private final Runnable startAction;
-    private final Runnable resumeAction;
-    private final Runnable pauseAction;
+    private final WindowRuntime runtime;
+    private final Surface surface;
+    private final AssistBar assistBar;
+    private final NavBar navBar;
 
-    public Window(View surface, Runnable startAction, Runnable resumeAction, Runnable pauseAction) {
-        this.surface = surface;
-        this.startAction = startAction;
-        this.resumeAction = resumeAction;
-        this.pauseAction = pauseAction;
+    public Window(WindowRuntime runtime) {
+        this.runtime = runtime;
+        surface = new Surface(runtime);
+        assistBar = new AssistBar(runtime);
+        navBar = new NavBar(runtime);
     }
 
     public void start() {
-        startAction.run();
+
+        assistBar.setShortcuts();
+        navBar.setTabs();
+
+        runtime.mountSurface(surface.handle());
+        runtime.mountAssistBar(assistBar.handle());
+        runtime.mountNavBar(navBar.handle());
+        runtime.initNavHidden();
+        navBar.bindOpenFromLeftEdge(runtime.leftEdgeHandle(), navBar::open);
+        navBar.bindSwipeOutClose(navBar::close);
     }
 
     public void resume() {
-        resumeAction.run();
+        surface.resume();
     }
 
     public void pause() {
-        pauseAction.run();
-    }
-
-    public View surface() {
-        return surface;
+        surface.pause();
     }
 }

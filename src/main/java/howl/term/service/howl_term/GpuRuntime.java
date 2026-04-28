@@ -1,5 +1,6 @@
 package howl.term.service.howl_term;
 
+import android.content.Context;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 
@@ -7,7 +8,8 @@ import android.opengl.GLSurfaceView;
 public final class GpuRuntime {
     private GpuRuntime() {}
 
-    public static Object createSurface(android.content.Context context) {
+    public static Object createSurface(Object contextHandle) {
+        final Context context = (Context) contextHandle;
         final GLSurfaceView surface = new GLSurfaceView(context);
         surface.setEGLContextClientVersion(2);
         surface.setRenderer(new GLSurfaceView.Renderer() {

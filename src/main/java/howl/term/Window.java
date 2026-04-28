@@ -1,22 +1,37 @@
 package howl.term;
 
-import howl.term.service.android.WindowRuntime;
+import howl.term.service.android.WidgetRuntime;
 import howl.term.widget.assist_bar.AssistBar;
 import howl.term.widget.nav_bar.NavBar;
 import howl.term.widget.term_surface.Surface;
 
 /** Window lifecycle coordinator and widget owner. */
 public final class Window {
-    private final WindowRuntime runtime;
+    private final Object surfaceContainer;
+    private final Object assistContainer;
+    private final Object navContainer;
+    private final Object scrim;
+    private final Object leftEdge;
     private final Surface surface;
     private final AssistBar assistBar;
     private final NavBar navBar;
 
-    public Window(WindowRuntime runtime) {
-        this.runtime = runtime;
-        surface = new Surface(runtime);
-        assistBar = new AssistBar(runtime);
-        navBar = new NavBar(runtime);
+    public Window(
+            Object contextHandle,
+            Object surfaceContainer,
+            Object assistContainer,
+            Object navContainer,
+            Object scrim,
+            Object leftEdge
+    ) {
+        this.surfaceContainer = surfaceContainer;
+        this.assistContainer = assistContainer;
+        this.navContainer = navContainer;
+        this.scrim = scrim;
+        this.leftEdge = leftEdge;
+        surface = new Surface(contextHandle);
+        assistBar = new AssistBar(contextHandle);
+        navBar = new NavBar(contextHandle, navContainer);
     }
 
     public void start() {
@@ -24,11 +39,12 @@ public final class Window {
         assistBar.setShortcuts();
         navBar.setTabs();
 
-        runtime.mountSurface(surface.handle());
-        runtime.mountAssistBar(assistBar.handle());
-        runtime.mountNavBar(navBar.handle());
-        runtime.initNavHidden();
-        navBar.bindOpenFromLeftEdge(runtime.leftEdgeHandle(), navBar::open);
+        WidgetRuntime.mountFill(surfaceContainer, surface.handle());
+        WidgetRuntime.mountFill(assistContainer, assistBar.handle());
+        WidgetRuntime.mountFill(navContainer, navBar.handle());
+        WidgetRuntime.hideOffscreenLeft(navContainer);
+        WidgetRuntime.setGone(scrim);
+        navBar.bindOpenFromLeftEdge(leftEdge, navBar::open);
         navBar.bindSwipeOutClose(navBar::close);
     }
 

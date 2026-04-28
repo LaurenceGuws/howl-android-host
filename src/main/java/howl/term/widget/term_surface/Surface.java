@@ -1,14 +1,13 @@
 package howl.term.widget.term_surface;
 
 import howl.term.service.howl_term.GpuRuntime;
-import howl.term.service.android.WindowRuntime;
 
 /** Terminal surface widget handle. */
 public final class Surface {
     private final Object handle;
 
-    public Surface(WindowRuntime runtime) {
-        this.handle = GpuRuntime.createSurface(runtime.context());
+    public Surface(Object contextHandle) {
+        this.handle = GpuRuntime.createSurface(contextHandle);
     }
 
     public Object handle() {

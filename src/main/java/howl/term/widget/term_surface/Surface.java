@@ -1,24 +1,16 @@
 package howl.term.widget.term_surface;
 
-import howl.term.service.howl_term.GpuRuntime;
+import howl.term.obj.android.GpuRuntime;
 
-/** Terminal surface widget handle. */
+/** Starts GPU runtime */
 public final class Surface {
-    private final Object handle;
+    private final GpuRuntime gpu;
 
-    public Surface(Object contextHandle) {
-        this.handle = GpuRuntime.createSurface(contextHandle);
+    public Surface() {
+        this.gpu = new GpuRuntime();
     }
 
-    public Object handle() {
-        return handle;
-    }
-
-    public void resume() {
-        GpuRuntime.resumeSurface(handle);
-    }
-
-    public void pause() {
-        GpuRuntime.pauseSurface(handle);
+    public android.view.View view(android.app.Activity activity) {
+        return gpu.surface(activity);
     }
 }

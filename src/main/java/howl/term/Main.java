@@ -1,41 +1,27 @@
 package howl.term;
 
-import howl.term.databinding.ActivityMainBinding;
-import howl.term.service.android.WindowRuntime;
+import howl.term.obj.android.WindowRuntime;
+import howl.term.widget.assist_bar.AssistBar;
+import howl.term.widget.term_surface.Surface;
 
-/** Activity entrypoint for host runtime lifecycle. */
+/** App activity. */
 public final class Main extends android.app.Activity {
-    private Window window;
+    private final WindowRuntime window = new WindowRuntime();
+    private Surface surface;
+    private AssistBar assistBar;
 
     @Override
-    protected void onCreate(android.os.Bundle state) {
-        super.onCreate(state);
-        final ActivityMainBinding binding = ActivityMainBinding.inflate(getLayoutInflater());
-        setContentView(binding.getRoot());
-        WindowRuntime.keepScreenOn(this);
-        final Object contextHandle = this;
-        final Object surfaceContainer = binding.productSurfaceContainer;
-        final Object assistContainer = binding.assistBarContainer;
-        final Object navContainer = binding.navBarContainer;
-        final Object scrim = binding.drawerScrim;
-        final Object leftEdge = binding.leftEdgeSwipeHotspot;
-        window = new Window(contextHandle, surfaceContainer, assistContainer, navContainer, scrim, leftEdge);
-        window.start();
-    }
+    protected void onCreate(android.os.Bundle bundle) {
+        super.onCreate(bundle);
+        final android.widget.FrameLayout root = window.root(this);
+        final android.widget.FrameLayout surfaceBox = window.container(this);
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (window != null) {
-            window.resume();
-        }
-    }
-
-    @Override
-    protected void onPause() {
-        if (window != null) {
-            window.pause();
-        }
-        super.onPause();
+        surface = new Surface();
+        assistBar = new AssistBar(this, window);
+        window.mount(root, surfaceBox, window.fill());
+        window.mount(root, assistBar.view(), window.bottomBar(this, 44));
+        window.mount(surfaceBox, surface.view(this), window.fill());
+        window.keepScreenOn(this);
+        window.setContent(this, root);
     }
 }

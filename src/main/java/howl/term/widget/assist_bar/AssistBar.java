@@ -1,36 +1,17 @@
 package howl.term.widget.assist_bar;
 
-import howl.term.service.android.WidgetRuntime;
+import howl.term.obj.android.WindowRuntime;
 
-import java.util.Arrays;
-import java.util.List;
-
-/** Assist bar widget handle. */
+/** Bottom assist bar widget. */
 public final class AssistBar {
-    private final List<String> shortcuts = Arrays.asList("IME", "Esc", "Tab", "Ctrl", "Alt", "Up", "Down", "Left", "Right");
-    private final Object contextHandle;
-    private final Object handle;
-    private final Object row;
+    private final android.widget.FrameLayout view;
 
-    public AssistBar(Object contextHandle) {
-        this.contextHandle = contextHandle;
-        this.handle = WidgetRuntime.horizontalScroll(contextHandle);
-        this.row = WidgetRuntime.linearHorizontal(contextHandle);
-        WidgetRuntime.setGravityCenterVertical(row);
-        WidgetRuntime.setPaddingDp(row, contextHandle, 4, 0, 4, 0);
-        WidgetRuntime.addChild(handle, row, WidgetRuntime.Size.WRAP, WidgetRuntime.Size.MATCH);
+    public AssistBar(android.app.Activity activity, WindowRuntime window) {
+        this.view = window.container(activity);
+        window.setBackground(view, 0xFF1A1A1A);
     }
 
-    public void setShortcuts() {
-        WidgetRuntime.removeAllChildren(row);
-        for (String label : shortcuts) {
-            final Object button = WidgetRuntime.borderlessButton(contextHandle, label);
-            WidgetRuntime.setMinWidthDp(button, contextHandle, 48);
-            WidgetRuntime.addChild(row, button, WidgetRuntime.Size.WRAP, WidgetRuntime.Size.MATCH);
-        }
-    }
-
-    public Object handle() {
-        return handle;
+    public android.view.View view() {
+        return view;
     }
 }

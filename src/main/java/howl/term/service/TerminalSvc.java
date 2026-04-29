@@ -3,7 +3,7 @@ package howl.term.service;
 /** Java wrapper for howl-term JNI runtime entrypoints. */
 public final class TerminalSvc {
     private static final String TAG = "howl.term.runtime";
-    private static final boolean nativeReady;
+    private static final boolean Ready;
     private boolean started;
 
     static {
@@ -12,9 +12,9 @@ public final class TerminalSvc {
             System.loadLibrary("howl_term");
             loaded = true;
         } catch (UnsatisfiedLinkError err) {
-            android.util.Log.e(TAG, "native library load failed err=" + err.getMessage());
+            android.util.Log.e(TAG, " library load failed err=" + err.getMessage());
         }
-        nativeReady = loaded;
+        Ready = loaded;
     }
 
     public TerminalSvc() {
@@ -22,38 +22,38 @@ public final class TerminalSvc {
     }
 
     public boolean start() {
-        if (!nativeReady) {
-            android.util.Log.e(TAG, "start blocked native not ready");
+        if (!Ready) {
+            android.util.Log.e(TAG, "start blocked  not ready");
             return false;
         }
-        final int rc = nativeStart();
+        final int rc = Start();
         started = rc == 0;
         if (rc != 0) {
-            android.util.Log.e(TAG, "nativeStart failed rc=" + rc);
+            android.util.Log.e(TAG, "Start failed rc=" + rc);
         }
         return started;
     }
 
     public void stop() {
-        if (!nativeReady || !started) {
+        if (!Ready || !started) {
             return;
         }
-        nativeStop();
+        Stop();
         started = false;
     }
 
     public int renderFrame(int width, int height, int texture) {
-        if (!nativeReady || !started) {
+        if (!Ready || !started) {
             return -1;
         }
         if (width <= 0 || height <= 0 || texture <= 0) {
             android.util.Log.e(TAG, "renderFrame invalid args w=" + width + " h=" + height + " tex=" + texture);
             return -2;
         }
-        return nativeRenderFrame(width, height, texture);
+        return RenderFrame(width, height, texture);
     }
 
-    private static native int nativeStart();
-    private static native void nativeStop();
-    private static native int nativeRenderFrame(int width, int height, int texture);
+    private static native int Start();
+    private static native void Stop();
+    private static native int RenderFrame(int width, int height, int texture);
 }

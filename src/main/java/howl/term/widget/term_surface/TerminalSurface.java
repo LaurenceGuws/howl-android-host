@@ -9,6 +9,9 @@ public final class TerminalSurface {
     private static final String TAG = "howl.term.runtime";
     private final GpuRuntime gpuRt;
     private final TerminalRuntime termRt;
+    private volatile int pendingWidth;
+    private volatile int pendingHeight;
+    private volatile boolean pendingResize;
     private boolean termStarted;
     private boolean stopRequested;
     private int lastCols;
@@ -17,6 +20,9 @@ public final class TerminalSurface {
     public TerminalSurface(UserlandRuntime userland) {
         this.gpuRt = new GpuRuntime();
         this.termRt = new TerminalRuntime(userland);
+        this.pendingWidth = 0;
+        this.pendingHeight = 0;
+        this.pendingResize = false;
         this.termStarted = false;
         this.stopRequested = false;
         this.lastCols = 0;
@@ -24,7 +30,7 @@ public final class TerminalSurface {
     }
 
     public android.view.View view(android.app.Activity activity) {
-        return gpuRt.surface(activity, new GpuRuntime.FrameHooks() {
+        final android.view.View view = gpuRt.surface(activity, new GpuRuntime.FrameHooks() {
             @Override
             public void onSurfaceCreated() {
                 stopRequested = false;
@@ -33,14 +39,7 @@ public final class TerminalSurface {
 
             @Override
             public void onSurfaceChanged(int width, int height) {
-                final int cols = Math.max(1, width / 8);
-                final int rows = Math.max(1, height / 16);
-                if (termStarted && (cols != lastCols || rows != lastRows)) {
-                    final int rc = termRt.resize(cols, rows);
-                    android.util.Log.i(TAG, "runtime.resize cols=" + cols + " rows=" + rows + " rc=" + rc);
-                    lastCols = cols;
-                    lastRows = rows;
-                }
+                scheduleResize(width, height);
             }
 
             @Override
@@ -55,6 +54,10 @@ public final class TerminalSurface {
                     return;
                 }
                 if (!termStarted) return;
+                if (pendingResize) {
+                    applyResize(pendingWidth, pendingHeight);
+                    pendingResize = false;
+                }
                 final int rc = termRt.tick();
                 if (rc < 0) {
                     android.util.Log.e(TAG, "runtime.tick rc=" + rc);
@@ -66,5 +69,30 @@ public final class TerminalSurface {
                 stopRequested = true;
             }
         });
+        view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            final int width = right - left;
+            final int height = bottom - top;
+            if (width != oldRight - oldLeft || height != oldBottom - oldTop) {
+                scheduleResize(width, height);
+            }
+        });
+        return view;
+    }
+
+    private void scheduleResize(int width, int height) {
+        pendingWidth = width;
+        pendingHeight = height;
+        pendingResize = true;
+    }
+
+    private void applyResize(int width, int height) {
+        final int cols = Math.max(1, width / 8);
+        final int rows = Math.max(1, height / 16);
+        if (termStarted && (cols != lastCols || rows != lastRows)) {
+            final int rc = termRt.resize(cols, rows);
+            android.util.Log.i(TAG, "runtime.resize cols=" + cols + " rows=" + rows + " rc=" + rc);
+            lastCols = cols;
+            lastRows = rows;
+        }
     }
 }

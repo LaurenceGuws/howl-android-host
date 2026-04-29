@@ -5,35 +5,35 @@ public final class TerminalRuntime {
     private static final String TAG = "howl.term.runtime";
     private static final boolean nativeReady;
     private boolean started;
-    private final UserlandRuntime userland;
 
     static {
         boolean loaded = false;
         try {
             System.loadLibrary("howl_term");
             loaded = true;
-            android.util.Log.i(TAG, "runtime.native.load ok lib=howl_term");
         } catch (UnsatisfiedLinkError err) {
-            android.util.Log.e(TAG, "runtime.native.load fail " + err.getMessage());
+            android.util.Log.e(TAG, "native library load failed err=" + err.getMessage());
+            loaded = false;
         }
         nativeReady = loaded;
     }
 
     public TerminalRuntime(UserlandRuntime userlandCfg) {
-        this.userland = userlandCfg;
+        if (userlandCfg == null) {
+            throw new IllegalArgumentException("userland runtime required");
+        }
         this.started = false;
     }
 
     public boolean start() {
         if (!nativeReady) {
-            android.util.Log.e(TAG, "runtime.start blocked native_not_ready");
+            android.util.Log.e(TAG, "start blocked native not ready");
             return false;
         }
         final int rc = nativeStart();
         started = rc == 0;
-        android.util.Log.i(TAG, "runtime.start rc=" + rc);
-        if (started) {
-            android.util.Log.i(TAG, "runtime.config shell=" + userland.getShell() + " prefix=" + userland.getPrefix());
+        if (rc != 0) {
+            android.util.Log.e(TAG, "nativeStart failed rc=" + rc);
         }
         return started;
     }
@@ -44,7 +44,6 @@ public final class TerminalRuntime {
         }
         nativeStop();
         started = false;
-        android.util.Log.i(TAG, "runtime.stop ok");
     }
 
     public int tick() {
@@ -61,8 +60,36 @@ public final class TerminalRuntime {
         return nativeResize(cols, rows);
     }
 
+    public int frameCols() {
+        if (!nativeReady || !started) {
+            return 0;
+        }
+        return nativeFrameCols();
+    }
+
+    public int frameRows() {
+        if (!nativeReady || !started) {
+            return 0;
+        }
+        return nativeFrameRows();
+    }
+
+    public int frameMask(byte[] out, int len) {
+        if (!nativeReady || !started || out == null || len <= 0) {
+            if (out == null || len <= 0) {
+                android.util.Log.e(TAG, "frameMask invalid buffer len=" + len);
+            }
+            return 0;
+        }
+        final int safeLen = Math.min(len, out.length);
+        return nativeFrameMask(out, safeLen);
+    }
+
     private static native int nativeStart();
     private static native void nativeStop();
     private static native int nativeTick();
     private static native int nativeResize(int cols, int rows);
+    private static native int nativeFrameCols();
+    private static native int nativeFrameRows();
+    private static native int nativeFrameMask(byte[] out, int len);
 }

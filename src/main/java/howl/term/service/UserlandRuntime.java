@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Android host userland runtime skeleton. */
 public final class UserlandRuntime {
-    private final String tag;
+    private static final String TAG = "howl.userland";
     private final String prefix;
     private final String home;
     private final String tmp;
@@ -20,7 +20,6 @@ public final class UserlandRuntime {
     private boolean started;
 
     public UserlandRuntime(android.content.Context context) {
-        this.tag = context.getString(R.string.userland_log_tag);
         final String appRoot = context.getString(R.string.userland_app_root, context.getPackageName());
         this.prefix = appRoot + context.getString(R.string.userland_prefix_suffix);
         this.home = appRoot + context.getString(R.string.userland_home_suffix);
@@ -29,7 +28,6 @@ public final class UserlandRuntime {
         this.shell = this.prefix + context.getString(R.string.userland_shell_suffix);
         this.manifestUrl = context.getString(R.string.userland_manifest_url);
         this.started = false;
-        android.util.Log.i(tag, "userland.init.01 runtime.constructed");
     }
 
     public String getShell() {
@@ -41,88 +39,83 @@ public final class UserlandRuntime {
     }
 
     public void start() {
-        if (started) return;
+        if (started) {
+            android.util.Log.e(TAG, "start called while already started");
+            return;
+        }
         started = true;
         new Thread(this::initUserland, "howl-userland-init").start();
     }
 
     private void initUserland() {
-        android.util.Log.i(tag, "userland.init.02 release.manifest_url=" + manifestUrl);
-        android.util.Log.i(tag, "userland.init.03 path.prefix=" + getPrefix());
-        android.util.Log.i(tag, "userland.init.04 path.home=" + home);
-        android.util.Log.i(tag, "userland.init.05 path.tmp=" + tmp);
-        if (!ensureDir(home, "userland.init.06")) {
+        if (!ensureDir(home)) {
+            android.util.Log.e(TAG, "failed to ensure home dir path=" + home);
             return;
         }
-        if (!ensureDir(tmp, "userland.init.07")) {
+        if (!ensureDir(tmp)) {
+            android.util.Log.e(TAG, "failed to ensure tmp dir path=" + tmp);
             return;
         }
 
         final boolean shellExists = new File(getShell()).isFile();
         final boolean pmExists = new File(howlPm).isFile();
-        android.util.Log.i(tag, "userland.init.08 check.shell exists=" + shellExists + " path=" + getShell());
-        android.util.Log.i(tag, "userland.init.09 check.howl_pm exists=" + pmExists + " path=" + howlPm);
 
         if (shellExists) {
-            android.util.Log.i(tag, "userland.ready.01 shell_present");
             runHowlPmDoctorAndList();
             return;
         }
         if (!pmExists) {
-            android.util.Log.e(tag, "userland.blocked.01 howl_pm_missing path=" + howlPm);
+            android.util.Log.e(TAG, "howl-pm binary missing path=" + howlPm);
             return;
         }
 
-        android.util.Log.i(tag, "userland.install.01 begin profile=dev-baseline");
         runHowlPmInstall();
         final boolean shellAfter = new File(getShell()).isFile();
-        android.util.Log.i(tag, "userland.install.02 postcheck.shell exists=" + shellAfter + " path=" + getShell());
-        if (shellAfter) {
-            android.util.Log.i(tag, "userland.ready.02 install_success");
-            runHowlPmDoctorAndList();
-        } else {
-            android.util.Log.e(tag, "userland.failed.01 install_completed_without_shell");
+        if (!shellAfter) {
+            android.util.Log.e(TAG, "shell still missing after install path=" + getShell());
+            return;
         }
+        runHowlPmDoctorAndList();
     }
 
-    private boolean ensureDir(String path, String step) {
+    private boolean ensureDir(String path) {
         final File dir = new File(path);
         if (dir.isDirectory()) {
-            android.util.Log.i(tag, step + " mkdir.skip exists=true path=" + path);
             return true;
         }
         final boolean ok = dir.mkdirs();
-        android.util.Log.i(tag, step + " mkdir.created=" + ok + " path=" + path);
-        if (!ok && !dir.isDirectory()) {
-            android.util.Log.e(tag, "userland.failed.00 mkdir path=" + path);
-            return false;
-        }
-        return true;
+        return ok || dir.isDirectory();
     }
 
     private void runHowlPmInstall() {
-        runHowlPm(
-                "userland.install",
+        final int rc = runHowlPm(
                 "install",
                 "--manifest",
                 manifestUrl,
                 "--prefix",
                 getPrefix(),
                 "dev-baseline");
+        if (rc != 0) {
+            android.util.Log.e(TAG, "howl-pm install failed rc=" + rc);
+        }
     }
 
     private void runHowlPmDoctorAndList() {
-        android.util.Log.i(tag, "userland.pm.01 doctor.begin");
-        runHowlPm("userland.pm.doctor", "doctor", "--prefix", getPrefix());
-        android.util.Log.i(tag, "userland.pm.02 list_available.begin");
-        runHowlPm("userland.pm.list_available", "list-available", "--manifest", manifestUrl, "--prefix", getPrefix());
+        final int doctorRc = runHowlPm("doctor", "--prefix", getPrefix());
+        if (doctorRc != 0) {
+            android.util.Log.e(TAG, "howl-pm doctor failed rc=" + doctorRc);
+        }
+        final int listRc = runHowlPm("list-available", "--manifest", manifestUrl, "--prefix", getPrefix());
+        if (listRc != 0) {
+            android.util.Log.e(TAG, "howl-pm list-available failed rc=" + listRc);
+        }
     }
 
-    private int runHowlPm(String logPrefix, String... args) {
+    private int runHowlPm(String... args) {
+        final String[] cmd = new String[args.length + 1];
+        cmd[0] = howlPm;
+        System.arraycopy(args, 0, cmd, 1, args.length);
         try {
-            final String[] cmd = new String[args.length + 1];
-            cmd[0] = howlPm;
-            System.arraycopy(args, 0, cmd, 1, args.length);
             final ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectErrorStream(true);
             pb.environment().put("HOME", home);
@@ -134,21 +127,14 @@ public final class UserlandRuntime {
             final Process process = pb.start();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                int n = 0;
-                while ((line = reader.readLine()) != null) {
-                    n += 1;
-                    android.util.Log.i(tag, logPrefix + ".output line=" + n + " " + line);
-                }
+                while (reader.readLine() != null) {}
             }
-            final int exit = process.waitFor();
-            android.util.Log.i(tag, logPrefix + ".exit_code=" + exit);
-            return exit;
+            return process.waitFor();
         } catch (IOException err) {
-            android.util.Log.e(tag, logPrefix + ".io_exception " + err.getClass().getSimpleName() + ": " + err.getMessage());
+            android.util.Log.e(TAG, "process spawn/io failure cmd=" + cmd[0] + " err=" + err.getMessage());
         } catch (InterruptedException err) {
             Thread.currentThread().interrupt();
-            android.util.Log.e(tag, logPrefix + ".interrupted");
+            android.util.Log.e(TAG, "process wait interrupted err=" + err.getMessage());
         }
         return -1;
     }

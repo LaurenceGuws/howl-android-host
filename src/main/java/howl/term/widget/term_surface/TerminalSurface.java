@@ -12,6 +12,7 @@ public final class TerminalSurface {
     private volatile int pendingWidth;
     private volatile int pendingHeight;
     private volatile boolean pendingResize;
+    private byte[] frameMask;
     private boolean termStarted;
     private boolean stopRequested;
     private int lastCols;
@@ -23,6 +24,7 @@ public final class TerminalSurface {
         this.pendingWidth = 0;
         this.pendingHeight = 0;
         this.pendingResize = false;
+        this.frameMask = new byte[0];
         this.termStarted = false;
         this.stopRequested = false;
         this.lastCols = 0;
@@ -35,6 +37,9 @@ public final class TerminalSurface {
             public void onSurfaceCreated() {
                 stopRequested = false;
                 termStarted = termRt.start();
+                if (!termStarted) {
+                    android.util.Log.e(TAG, "runtime start failed");
+                }
             }
 
             @Override
@@ -50,7 +55,6 @@ public final class TerminalSurface {
                     stopRequested = false;
                     lastCols = 0;
                     lastRows = 0;
-                    android.util.Log.i(TAG, "runtime.stop surface_destroyed");
                     return;
                 }
                 if (!termStarted) return;
@@ -61,7 +65,9 @@ public final class TerminalSurface {
                 final int rc = termRt.tick();
                 if (rc < 0) {
                     android.util.Log.e(TAG, "runtime.tick rc=" + rc);
+                    return;
                 }
+                presentFrameMask();
             }
 
             @Override
@@ -90,9 +96,30 @@ public final class TerminalSurface {
         final int rows = Math.max(1, height / 16);
         if (termStarted && (cols != lastCols || rows != lastRows)) {
             final int rc = termRt.resize(cols, rows);
-            android.util.Log.i(TAG, "runtime.resize cols=" + cols + " rows=" + rows + " rc=" + rc);
+            if (rc < 0) {
+                android.util.Log.e(TAG, "runtime.resize rc=" + rc);
+            }
             lastCols = cols;
             lastRows = rows;
         }
+    }
+
+    private void presentFrameMask() {
+        final int cols = termRt.frameCols();
+        final int rows = termRt.frameRows();
+        if (cols <= 0 || rows <= 0) {
+            android.util.Log.e(TAG, "invalid frame dimensions cols=" + cols + " rows=" + rows);
+            return;
+        }
+        final int count = cols * rows;
+        if (frameMask.length != count) {
+            frameMask = new byte[count];
+        }
+        final int used = termRt.frameMask(frameMask, count);
+        if (used <= 0) {
+            android.util.Log.e(TAG, "frame mask read failed used=" + used + " expected=" + count);
+            return;
+        }
+        gpuRt.presentMask(cols, rows, frameMask, used);
     }
 }

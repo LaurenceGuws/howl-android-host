@@ -22,7 +22,7 @@ displayed_seen=0
 crash_seen=0
 
 for _ in $(seq 1 "$TIMEOUT_SECS"); do
-  dump="$(adb logcat -d -v time HowlMain:I ActivityTaskManager:I AndroidRuntime:E '*:S' || true)"
+  dump="$(adb logcat -d -v time || true)"
   grep -q "HowlMain.*onResume: window resumed" <<<"$dump" && resume_seen=1
   grep -q "Displayed howl.term/.Main" <<<"$dump" && displayed_seen=1
   grep -q "AndroidRuntime" <<<"$dump" && crash_seen=1
@@ -33,7 +33,7 @@ for _ in $(seq 1 "$TIMEOUT_SECS"); do
 done
 
 PID="$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r' || true)"
-adb logcat -d -v time HowlMain:I ActivityTaskManager:I AndroidRuntime:E '*:S' > "$LOG_FILE" || true
+adb logcat -d -v time > "$LOG_FILE" || true
 
 launch_ok=0
 if [ "$resume_seen" -eq 1 ] || [ "$displayed_seen" -eq 1 ]; then

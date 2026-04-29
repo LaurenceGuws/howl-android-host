@@ -3,9 +3,9 @@ package howl.term;
 import howl.term.service.InputSvc;
 import howl.term.service.WindowSvc;
 import howl.term.service.UserlandSvc;
-import howl.term.widget.assist_bar.AssistBar;
-import howl.term.widget.side_panel.SidePanel;
-import howl.term.widget.term_surface.TerminalSurface;
+import howl.term.widget.AssistBar;
+import howl.term.widget.SidePanel;
+import howl.term.widget.TerminalSurface;
 
 /** App activity. */
 public final class Main extends android.app.Activity {

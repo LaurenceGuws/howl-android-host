@@ -1,4 +1,4 @@
-package howl.term.widget.term_surface;
+package howl.term.widget;
 
 import howl.term.service.GpuSvc;
 import howl.term.service.TerminalSvc;

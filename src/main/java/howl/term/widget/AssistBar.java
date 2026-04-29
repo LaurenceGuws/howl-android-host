@@ -1,4 +1,4 @@
-package howl.term.widget.assist_bar;
+package howl.term.widget;
 
 import howl.term.service.InputSvc;
 import howl.term.service.WindowSvc;

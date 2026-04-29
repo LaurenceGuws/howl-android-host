@@ -1,4 +1,4 @@
-package howl.term.widget.side_panel;
+package howl.term.widget;
 
 import howl.term.service.InputSvc;
 import howl.term.service.WindowSvc;

@@ -6,32 +6,32 @@ import howl.term.service.WindowRuntime;
 /** Left slide-out widget. */
 public final class SidePanel {
     private final android.widget.FrameLayout view;
-    private final WindowRuntime window;
-    private final InputRuntime input;
+    private final WindowRuntime winRt;
+    private final InputRuntime inputRt;
 
-    public SidePanel(android.app.Activity activity, WindowRuntime window) {
-        this.window = window;
-        this.input = new InputRuntime();
-        this.view = window.container(activity);
-        window.setBackground(view, 0xFF202020);
-        window.setGone(view);
+    public SidePanel(android.app.Activity activity, WindowRuntime winRt) {
+        this.winRt = winRt;
+        this.inputRt = new InputRuntime();
+        this.view = winRt.container(activity);
+        winRt.setBackground(view, 0xFF202020);
+        winRt.setGone(view);
     }
 
     public void bindOpen(android.view.View edge) {
-        input.bindSwipeRight(edge, this::open);
+        inputRt.bindSwipeRight(edge, this::open);
     }
 
     public void bindClose() {
-        input.bindSwipeLeft(view, this::close);
+        inputRt.bindSwipeLeft(view, this::close);
     }
 
     public void open() {
-        window.setVisible(view);
-        window.setX(view, 0f);
+        winRt.setVisible(view);
+        winRt.setX(view, 0f);
     }
 
     public void close() {
-        window.setGone(view);
+        winRt.setGone(view);
     }
 
     public android.view.View view() {

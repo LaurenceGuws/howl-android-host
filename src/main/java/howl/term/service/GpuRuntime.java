@@ -3,26 +3,22 @@ package howl.term.service;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import java.nio.ByteBuffer;
-import howl.term.service.TerminalRuntime;
-
 /** Presents a single gpu texture */
 public class GpuRuntime {
-    private static final String TAG = "howl.term.runtime";
+    public interface FrameHooks {
+        void onSurfaceCreated();
+        void onSurfaceChanged(int width, int height);
+        void onDrawFrame();
+        void onSurfaceDestroyed();
+    }
+
     private int texture;
-    private final TerminalRuntime termRuntime;
-    private boolean termStarted;
-    private int lastCols;
-    private int lastRows;
 
     public GpuRuntime() {
         this.texture = 0;
-        this.termRuntime = new TerminalRuntime();
-        this.termStarted = false;
-        this.lastCols = 0;
-        this.lastRows = 0;
     }
 
-    public android.view.View surface(android.app.Activity activity) {
+    public android.view.View surface(android.app.Activity activity, FrameHooks hooks) {
         final GLSurfaceView view = new GLSurfaceView(activity);
         view.setEGLContextClientVersion(2);
         view.setRenderer(new GLSurfaceView.Renderer() {
@@ -30,31 +26,31 @@ public class GpuRuntime {
             public void onSurfaceCreated(javax.microedition.khronos.opengles.GL10 gl, javax.microedition.khronos.egl.EGLConfig config) {
                 initTexture();
                 GLES20.glClearColor(0.06f, 0.09f, 0.14f, 1.0f);
-                termStarted = termRuntime.start();
+                hooks.onSurfaceCreated();
             }
 
             @Override
             public void onSurfaceChanged(javax.microedition.khronos.opengles.GL10 gl, int width, int height) {
                 GLES20.glViewport(0, 0, width, height);
-                final int cols = Math.max(1, width / 8);
-                final int rows = Math.max(1, height / 16);
-                if (termStarted && (cols != lastCols || rows != lastRows)) {
-                    final int rc = termRuntime.resize(cols, rows);
-                    android.util.Log.i(TAG, "runtime.resize cols=" + cols + " rows=" + rows + " rc=" + rc);
-                    lastCols = cols;
-                    lastRows = rows;
-                }
+                hooks.onSurfaceChanged(width, height);
             }
 
             @Override
             public void onDrawFrame(javax.microedition.khronos.opengles.GL10 gl) {
-                if (termStarted) {
-                    final int drained = termRuntime.tick();
-                    if (drained < 0) {
-                        android.util.Log.e(TAG, "runtime.tick rc=" + drained);
-                    }
-                }
+                hooks.onDrawFrame();
                 GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            }
+        });
+        view.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(android.view.SurfaceHolder holder) {}
+
+            @Override
+            public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {}
+
+            @Override
+            public void surfaceDestroyed(android.view.SurfaceHolder holder) {
+                hooks.onSurfaceDestroyed();
             }
         });
         view.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);

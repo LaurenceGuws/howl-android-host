@@ -55,7 +55,7 @@ fi
   zig build \
     -Dtarget=aarch64-linux-android \
     -Drender-variant=gles \
-    -Dsession-transport-variant=unix_pty \
+    -Dsession-transport-variant=android_pty \
     -Dandroid-ndk-sysroot="$NDK_SYSROOT" \
     --sysroot "$NDK_SYSROOT"
 )

@@ -9,36 +9,53 @@ import java.nio.charset.StandardCharsets;
 /** Android host userland runtime skeleton. */
 public final class UserlandRuntime {
     private static final String TAG = "howl.userland";
-    private static final String PACKAGE_NAME = "howl.term";
-    private static final String PREFIX = "/data/data/" + PACKAGE_NAME + "/files/usr";
-    private static final String HOME = "/data/data/" + PACKAGE_NAME + "/files/home";
-    private static final String TMP = "/data/data/" + PACKAGE_NAME + "/cache/tmp";
-    private static final String HOWL_PM = PREFIX + "/bin/howl-pm";
-    private static final String BASH = PREFIX + "/bin/bash";
-    private static final String MANIFEST_URL =
-            "https://github.com/LaurenceGuws/howl-pm/releases/download/android-dev-2026.04.18.182005/android-dev-prefix.release.manifest.json";
+    private final String prefix;
+    private final String home;
+    private final String tmp;
+    private final String howlPm;
+    private final String bash;
+    private final String manifestUrl;
+    private boolean started;
 
-    public UserlandRuntime() {
+    public UserlandRuntime(
+            String prefix,
+            String home,
+            String tmp,
+            String howlPm,
+            String bash,
+            String manifestUrl) {
+        this.prefix = prefix;
+        this.home = home;
+        this.tmp = tmp;
+        this.howlPm = howlPm;
+        this.bash = bash;
+        this.manifestUrl = manifestUrl;
+        this.started = false;
         android.util.Log.i(TAG, "userland.init.01 runtime.constructed");
+    }
+
+    public void start() {
+        if (started) return;
+        started = true;
         new Thread(this::initUserland, "howl-userland-init").start();
     }
 
     private void initUserland() {
-        android.util.Log.i(TAG, "userland.init.02 release.manifest_url=" + MANIFEST_URL);
-        android.util.Log.i(TAG, "userland.init.03 path.prefix=" + PREFIX);
-        android.util.Log.i(TAG, "userland.init.04 path.home=" + HOME);
-        android.util.Log.i(TAG, "userland.init.05 path.tmp=" + TMP);
-        if (!ensureDir(HOME, "userland.init.06")) {
+        android.util.Log.i(TAG, "userland.init.02 release.manifest_url=" + manifestUrl);
+        android.util.Log.i(TAG, "userland.init.03 path.prefix=" + prefix);
+        android.util.Log.i(TAG, "userland.init.04 path.home=" + home);
+        android.util.Log.i(TAG, "userland.init.05 path.tmp=" + tmp);
+        if (!ensureDir(home, "userland.init.06")) {
             return;
         }
-        if (!ensureDir(TMP, "userland.init.07")) {
+        if (!ensureDir(tmp, "userland.init.07")) {
             return;
         }
 
-        final boolean bashExists = new File(BASH).isFile();
-        final boolean pmExists = new File(HOWL_PM).isFile();
-        android.util.Log.i(TAG, "userland.init.08 check.bash exists=" + bashExists + " path=" + BASH);
-        android.util.Log.i(TAG, "userland.init.09 check.howl_pm exists=" + pmExists + " path=" + HOWL_PM);
+        final boolean bashExists = new File(bash).isFile();
+        final boolean pmExists = new File(howlPm).isFile();
+        android.util.Log.i(TAG, "userland.init.08 check.bash exists=" + bashExists + " path=" + bash);
+        android.util.Log.i(TAG, "userland.init.09 check.howl_pm exists=" + pmExists + " path=" + howlPm);
 
         if (bashExists) {
             android.util.Log.i(TAG, "userland.ready.01 bash_present");
@@ -46,14 +63,14 @@ public final class UserlandRuntime {
             return;
         }
         if (!pmExists) {
-            android.util.Log.e(TAG, "userland.blocked.01 howl_pm_missing path=" + HOWL_PM);
+            android.util.Log.e(TAG, "userland.blocked.01 howl_pm_missing path=" + howlPm);
             return;
         }
 
         android.util.Log.i(TAG, "userland.install.01 begin profile=dev-baseline");
         runHowlPmInstall();
-        final boolean bashAfter = new File(BASH).isFile();
-        android.util.Log.i(TAG, "userland.install.02 postcheck.bash exists=" + bashAfter + " path=" + BASH);
+        final boolean bashAfter = new File(bash).isFile();
+        android.util.Log.i(TAG, "userland.install.02 postcheck.bash exists=" + bashAfter + " path=" + bash);
         if (bashAfter) {
             android.util.Log.i(TAG, "userland.ready.02 install_success");
             runHowlPmDoctorAndList();
@@ -82,32 +99,32 @@ public final class UserlandRuntime {
                 "userland.install",
                 "install",
                 "--manifest",
-                MANIFEST_URL,
+                manifestUrl,
                 "--prefix",
-                PREFIX,
+                prefix,
                 "dev-baseline");
     }
 
     private void runHowlPmDoctorAndList() {
         android.util.Log.i(TAG, "userland.pm.01 doctor.begin");
-        runHowlPm("userland.pm.doctor", "doctor", "--prefix", PREFIX);
+        runHowlPm("userland.pm.doctor", "doctor", "--prefix", prefix);
         android.util.Log.i(TAG, "userland.pm.02 list_available.begin");
-        runHowlPm("userland.pm.list_available", "list-available", "--manifest", MANIFEST_URL, "--prefix", PREFIX);
+        runHowlPm("userland.pm.list_available", "list-available", "--manifest", manifestUrl, "--prefix", prefix);
     }
 
     private int runHowlPm(String logPrefix, String... args) {
         try {
             final String[] cmd = new String[args.length + 1];
-            cmd[0] = HOWL_PM;
+            cmd[0] = howlPm;
             System.arraycopy(args, 0, cmd, 1, args.length);
             final ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectErrorStream(true);
-            pb.environment().put("HOME", HOME);
-            pb.environment().put("TMPDIR", TMP);
-            pb.environment().put("PREFIX", PREFIX);
-            pb.environment().put("PATH", PREFIX + "/bin:/system/bin");
-            pb.environment().put("SHELL", BASH);
-            pb.environment().put("LD_LIBRARY_PATH", PREFIX + "/lib");
+            pb.environment().put("HOME", home);
+            pb.environment().put("TMPDIR", tmp);
+            pb.environment().put("PREFIX", prefix);
+            pb.environment().put("PATH", prefix + "/bin:/system/bin");
+            pb.environment().put("SHELL", bash);
+            pb.environment().put("LD_LIBRARY_PATH", prefix + "/lib");
             final Process process = pb.start();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {

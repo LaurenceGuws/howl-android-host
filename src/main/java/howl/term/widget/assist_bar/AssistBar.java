@@ -6,13 +6,13 @@ import howl.term.service.WindowRuntime;
 public final class AssistBar {
     private final android.widget.FrameLayout view;
 
-    public AssistBar(android.app.Activity activity, WindowRuntime window) {
-        this.view = window.container(activity);
-        window.setBackground(view, 0xFF1A1A1A);
+    public AssistBar(android.app.Activity activity, WindowRuntime winRt) {
+        this.view = winRt.container(activity);
+        winRt.setBackground(view, 0xFF1A1A1A);
         view.setClickable(true);
         view.setFocusable(true);
         view.setFocusableInTouchMode(true);
-        window.bindTap(view, () -> window.toggleIme(activity, view));
+        winRt.bindTap(view, () -> winRt.toggleIme(activity, view));
     }
 
     public android.view.View view() {

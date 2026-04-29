@@ -74,7 +74,7 @@ public final class WindowRuntime {
                 (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
         if (imm == null) return;
         anchor.requestFocus();
-        imm.toggleSoftInput(android.view.inputmethod.InputMethodManager.SHOW_FORCED, 0);
+        imm.showSoftInput(anchor, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
     }
 
     private int dp(android.app.Activity activity, int value) {

@@ -13,15 +13,11 @@ public final class TerminalRuntime {
             loaded = true;
         } catch (UnsatisfiedLinkError err) {
             android.util.Log.e(TAG, "native library load failed err=" + err.getMessage());
-            loaded = false;
         }
         nativeReady = loaded;
     }
 
-    public TerminalRuntime(UserlandRuntime userlandCfg) {
-        if (userlandCfg == null) {
-            throw new IllegalArgumentException("userland runtime required");
-        }
+    public TerminalRuntime() {
         this.started = false;
     }
 
@@ -46,50 +42,18 @@ public final class TerminalRuntime {
         started = false;
     }
 
-    public int tick() {
+    public int renderFrame(int width, int height, int texture) {
         if (!nativeReady || !started) {
             return -1;
         }
-        return nativeTick();
-    }
-
-    public int resize(int cols, int rows) {
-        if (!nativeReady || !started) {
-            return -1;
+        if (width <= 0 || height <= 0 || texture <= 0) {
+            android.util.Log.e(TAG, "renderFrame invalid args w=" + width + " h=" + height + " tex=" + texture);
+            return -2;
         }
-        return nativeResize(cols, rows);
-    }
-
-    public int frameCols() {
-        if (!nativeReady || !started) {
-            return 0;
-        }
-        return nativeFrameCols();
-    }
-
-    public int frameRows() {
-        if (!nativeReady || !started) {
-            return 0;
-        }
-        return nativeFrameRows();
-    }
-
-    public int frameMask(byte[] out, int len) {
-        if (!nativeReady || !started || out == null || len <= 0) {
-            if (out == null || len <= 0) {
-                android.util.Log.e(TAG, "frameMask invalid buffer len=" + len);
-            }
-            return 0;
-        }
-        final int safeLen = Math.min(len, out.length);
-        return nativeFrameMask(out, safeLen);
+        return nativeRenderFrame(width, height, texture);
     }
 
     private static native int nativeStart();
     private static native void nativeStop();
-    private static native int nativeTick();
-    private static native int nativeResize(int cols, int rows);
-    private static native int nativeFrameCols();
-    private static native int nativeFrameRows();
-    private static native int nativeFrameMask(byte[] out, int len);
+    private static native int nativeRenderFrame(int width, int height, int texture);
 }

@@ -20,9 +20,6 @@ public class GpuRuntime {
     private int uvHandle;
     private int samplerHandle;
     private FloatBuffer quadBuffer;
-    private int texWidth;
-    private int texHeight;
-    private ByteBuffer texPixels;
 
     public GpuRuntime() {
         this.texture = 0;
@@ -31,9 +28,6 @@ public class GpuRuntime {
         this.uvHandle = -1;
         this.samplerHandle = -1;
         this.quadBuffer = null;
-        this.texWidth = 0;
-        this.texHeight = 0;
-        this.texPixels = null;
     }
 
     public android.view.View surface(android.app.Activity activity, FrameHooks hooks) {
@@ -98,65 +92,10 @@ public class GpuRuntime {
                 ByteBuffer.wrap(pixel)
         );
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-        texWidth = 1;
-        texHeight = 1;
-        texPixels = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
     }
 
-    public void presentMask(int cols, int rows, byte[] mask, int used) {
-        if (texture == 0 || cols <= 0 || rows <= 0 || mask == null || used <= 0) return;
-        final int count = Math.min(used, cols * rows);
-        ensureTexture(cols, rows);
-        texPixels.position(0);
-        for (int i = 0; i < count; i += 1) {
-            final boolean on = mask[i] != 0;
-            texPixels.put((byte) (on ? 210 : 20));
-            texPixels.put((byte) (on ? 220 : 28));
-            texPixels.put((byte) (on ? 230 : 45));
-            texPixels.put((byte) 255);
-        }
-        for (int i = count; i < (cols * rows); i += 1) {
-            texPixels.put((byte) 20);
-            texPixels.put((byte) 28);
-            texPixels.put((byte) 45);
-            texPixels.put((byte) 255);
-        }
-        texPixels.position(0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
-        GLES20.glTexSubImage2D(
-                GLES20.GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                cols,
-                rows,
-                GLES20.GL_RGBA,
-                GLES20.GL_UNSIGNED_BYTE,
-                texPixels
-        );
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-    }
-
-    private void ensureTexture(int width, int height) {
-        if (width == texWidth && height == texHeight && texPixels != null) {
-            return;
-        }
-        texWidth = width;
-        texHeight = height;
-        texPixels = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder());
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
-        GLES20.glTexImage2D(
-                GLES20.GL_TEXTURE_2D,
-                0,
-                GLES20.GL_RGBA,
-                width,
-                height,
-                0,
-                GLES20.GL_RGBA,
-                GLES20.GL_UNSIGNED_BYTE,
-                null
-        );
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+    public int texture() {
+        return texture;
     }
 
     private void draw() {

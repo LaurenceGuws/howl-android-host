@@ -72,9 +72,38 @@ public final class WindowRuntime {
     public void toggleIme(android.app.Activity activity, android.view.View anchor) {
         final android.view.inputmethod.InputMethodManager imm =
                 (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
-        if (imm == null) return;
+        if (imm == null) {
+            android.util.Log.e("howl.term.runtime", "toggleIme failed imm missing");
+            return;
+        }
+        final android.view.View decor = activity.getWindow().getDecorView();
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            final android.view.WindowInsets insets = decor.getRootWindowInsets();
+            final android.view.WindowInsetsController controller = decor.getWindowInsetsController();
+            if (controller == null) {
+                android.util.Log.e("howl.term.runtime", "toggleIme failed insets controller missing");
+                return;
+            }
+            final boolean visible = insets != null && insets.isVisible(android.view.WindowInsets.Type.ime());
+            if (visible) {
+                controller.hide(android.view.WindowInsets.Type.ime());
+                return;
+            }
+            anchor.requestFocus();
+            controller.show(android.view.WindowInsets.Type.ime());
+            return;
+        }
+
         anchor.requestFocus();
-        imm.showSoftInput(anchor, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        if (imm.isActive(anchor)) {
+            final boolean ok = imm.hideSoftInputFromWindow(decor.getWindowToken(), 0);
+            if (!ok) android.util.Log.e("howl.term.runtime", "toggleIme hide failed");
+            return;
+        }
+        final boolean ok = imm.showSoftInput(anchor, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        if (!ok) {
+            android.util.Log.e("howl.term.runtime", "toggleIme show failed");
+        }
     }
 
     private int dp(android.app.Activity activity, int value) {

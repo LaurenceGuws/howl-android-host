@@ -25,7 +25,6 @@ public final class Main extends android.app.Activity {
         final android.widget.FrameLayout root = winRt.root(this);
         final android.widget.FrameLayout surfaceBox = winRt.container(this);
         final android.view.View leftEdge = winRt.container(this);
-        final android.view.View bottomEdge = winRt.container(this);
 
         termSfc = new TerminalSurface(userlandRt);
         assistBar = new AssistBar(this, winRt);
@@ -37,13 +36,8 @@ public final class Main extends android.app.Activity {
                 Math.round(24 * getResources().getDisplayMetrics().density),
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT
         ));
-        winRt.mount(root, bottomEdge, new android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                Math.round(36 * getResources().getDisplayMetrics().density),
-                android.view.Gravity.BOTTOM
-        ));
         winRt.mount(surfaceBox, termSfc.view(this), winRt.fill());
-        inputRt.bindSwipeUp(bottomEdge, assistBar::show);
+        inputRt.bindSwipeUpFromBottom(root, Math.round(54 * getResources().getDisplayMetrics().density), assistBar::show);
         sidePanel.bindOpen(leftEdge);
         sidePanel.bindClose();
         winRt.keepScreenOn(this);

@@ -9,7 +9,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
 /** Android host userland runtime skeleton. */
-public final class UserlandRuntime {
+public final class UserlandSvc {
     private static final String TAG = "howl.userland";
     private final String prefix;
     private final String home;
@@ -19,7 +19,7 @@ public final class UserlandRuntime {
     private final String manifestUrl;
     private boolean started;
 
-    public UserlandRuntime(android.content.Context context) {
+    public UserlandSvc(android.content.Context context) {
         final String appRoot = context.getString(R.string.userland_app_root, context.getPackageName());
         this.prefix = appRoot + context.getString(R.string.userland_prefix_suffix);
         this.home = appRoot + context.getString(R.string.userland_home_suffix);

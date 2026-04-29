@@ -1,7 +1,7 @@
 package howl.term.service;
 
 /** Java wrapper for howl-term JNI runtime entrypoints. */
-public final class TerminalRuntime {
+public final class TerminalSvc {
     private static final String TAG = "howl.term.runtime";
     private static final boolean nativeReady;
     private boolean started;
@@ -17,7 +17,7 @@ public final class TerminalRuntime {
         nativeReady = loaded;
     }
 
-    public TerminalRuntime() {
+    public TerminalSvc() {
         this.started = false;
     }
 

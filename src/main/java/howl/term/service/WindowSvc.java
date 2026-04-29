@@ -1,8 +1,8 @@
 package howl.term.service;
 
 /** Android window wrappers. */
-public final class WindowRuntime {
-    public WindowRuntime() {}
+public final class WindowSvc {
+    public WindowSvc() {}
 
     public android.widget.FrameLayout root(android.app.Activity activity) {
         return new android.widget.FrameLayout(activity);

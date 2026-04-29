@@ -1,53 +1,53 @@
 package howl.term;
 
-import howl.term.service.InputRuntime;
-import howl.term.service.WindowRuntime;
-import howl.term.service.UserlandRuntime;
+import howl.term.service.InputSvc;
+import howl.term.service.WindowSvc;
+import howl.term.service.UserlandSvc;
 import howl.term.widget.assist_bar.AssistBar;
 import howl.term.widget.side_panel.SidePanel;
 import howl.term.widget.term_surface.TerminalSurface;
 
 /** App activity. */
 public final class Main extends android.app.Activity {
-    private final WindowRuntime winRt = new WindowRuntime();
-    private final InputRuntime inputRt = new InputRuntime();
+    private final WindowSvc winSvc = new WindowSvc();
+    private final InputSvc inputSvc = new InputSvc();
     private TerminalSurface termSfc;
     private AssistBar assistBar;
     private SidePanel sidePanel;
-    private UserlandRuntime userlandRt;
+    private UserlandSvc userlandSvc;
 
     @Override
     protected void onCreate(android.os.Bundle bundle) {
         super.onCreate(bundle);
-        userlandRt = new UserlandRuntime(this);
-        userlandRt.start();
+        userlandSvc = new UserlandSvc(this);
+        userlandSvc.start();
 
-        final android.widget.FrameLayout root = winRt.root(this);
-        final android.widget.FrameLayout surfaceBox = winRt.container(this);
-        final android.view.View leftEdge = winRt.container(this);
+        final android.widget.FrameLayout root = winSvc.root(this);
+        final android.widget.FrameLayout surfaceBox = winSvc.container(this);
+        final android.view.View leftEdge = winSvc.container(this);
 
-        termSfc = new TerminalSurface(userlandRt);
-        assistBar = new AssistBar(this, winRt);
-        sidePanel = new SidePanel(this, winRt);
-        winRt.mount(root, surfaceBox, winRt.fill());
-        winRt.mount(root, sidePanel.view(), winRt.leftPanel(this, 280));
-        winRt.mount(root, assistBar.view(), winRt.bottomBar(this, 66));
-        winRt.mount(root, leftEdge, new android.widget.FrameLayout.LayoutParams(
+        termSfc = new TerminalSurface(userlandSvc);
+        assistBar = new AssistBar(this, winSvc);
+        sidePanel = new SidePanel(this, winSvc);
+        winSvc.mount(root, surfaceBox, winSvc.fill());
+        winSvc.mount(root, sidePanel.view(), winSvc.leftPanel(this, 280));
+        winSvc.mount(root, assistBar.view(), winSvc.bottomBar(this, 66));
+        winSvc.mount(root, leftEdge, new android.widget.FrameLayout.LayoutParams(
                 Math.round(24 * getResources().getDisplayMetrics().density),
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT
         ));
-        winRt.mount(surfaceBox, termSfc.view(this), winRt.fill());
-        inputRt.bindSwipeUpFromBottom(root, Math.round(54 * getResources().getDisplayMetrics().density), assistBar::show);
+        winSvc.mount(surfaceBox, termSfc.view(this), winSvc.fill());
+        inputSvc.bindSwipeUpFromBottom(root, Math.round(54 * getResources().getDisplayMetrics().density), assistBar::show);
         sidePanel.bindOpen(leftEdge);
         sidePanel.bindClose();
-        winRt.keepScreenOn(this);
-        winRt.setContent(this, root);
+        winSvc.keepScreenOn(this);
+        winSvc.setContent(this, root);
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        if (userlandRt == null) {
+        if (userlandSvc == null) {
             throw new IllegalStateException("userland runtime missing");
         }
     }

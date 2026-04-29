@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 /** Presents a single gpu texture */
-public class GpuRuntime {
+public class GpuSvc {
     public interface FrameHooks {
         void onSurfaceCreated();
         void onSurfaceChanged(int width, int height);
@@ -21,7 +21,7 @@ public class GpuRuntime {
     private int samplerHandle;
     private FloatBuffer quadBuffer;
 
-    public GpuRuntime() {
+    public GpuSvc() {
         this.texture = 0;
         this.program = 0;
         this.posHandle = -1;

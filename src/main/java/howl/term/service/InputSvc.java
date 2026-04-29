@@ -1,8 +1,8 @@
 package howl.term.service;
 
 /** Android input wrappers. */
-public final class InputRuntime {
-    public InputRuntime() {}
+public final class InputSvc {
+    public InputSvc() {}
 
     public void bindSwipeRight(android.view.View view, Runnable onSwipe) {
         final float[] downX = new float[] { 0f };

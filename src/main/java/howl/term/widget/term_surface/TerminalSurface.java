@@ -1,14 +1,14 @@
 package howl.term.widget.term_surface;
 
-import howl.term.service.GpuRuntime;
-import howl.term.service.TerminalRuntime;
-import howl.term.service.UserlandRuntime;
+import howl.term.service.GpuSvc;
+import howl.term.service.TerminalSvc;
+import howl.term.service.UserlandSvc;
 
 /** Starts GPU runtime */
 public final class TerminalSurface {
     private static final String TAG = "howl.term.runtime";
-    private final GpuRuntime gpuRt;
-    private final TerminalRuntime termRt;
+    private final GpuSvc gpuSvc;
+    private final TerminalSvc termSvc;
     private volatile int pendingWidth;
     private volatile int pendingHeight;
     private volatile boolean pendingResize;
@@ -16,12 +16,12 @@ public final class TerminalSurface {
     private boolean termStarted;
     private boolean stopRequested;
 
-    public TerminalSurface(UserlandRuntime userland) {
-        this.gpuRt = new GpuRuntime();
+    public TerminalSurface(UserlandSvc userland) {
+        this.gpuSvc = new GpuSvc();
         if (userland == null) {
             throw new IllegalArgumentException("userland runtime required");
         }
-        this.termRt = new TerminalRuntime();
+        this.termSvc = new TerminalSvc();
         this.pendingWidth = 0;
         this.pendingHeight = 0;
         this.pendingResize = false;
@@ -31,12 +31,12 @@ public final class TerminalSurface {
     }
 
     public android.view.View view(android.app.Activity activity) {
-        final android.view.View view = gpuRt.surface(activity, new GpuRuntime.FrameHooks() {
+        final android.view.View view = gpuSvc.surface(activity, new GpuSvc.FrameHooks() {
             @Override
             public void onSurfaceCreated() {
                 stopRequested = false;
-                texture = gpuRt.texture();
-                termStarted = termRt.start();
+                texture = gpuSvc.texture();
+                termStarted = termSvc.start();
                 if (!termStarted) {
                     android.util.Log.e(TAG, "runtime start failed");
                 }
@@ -50,12 +50,12 @@ public final class TerminalSurface {
             @Override
             public void onDrawFrame() {
                 if (stopRequested && termStarted) {
-                    stopRuntime();
+                    stopSvc();
                     return;
                 }
                 if (!termStarted) return;
                 if (pendingResize) pendingResize = false;
-                final int rc = termRt.renderFrame(
+                final int rc = termSvc.renderFrame(
                         Math.max(1, pendingWidth),
                         Math.max(1, pendingHeight),
                         texture
@@ -68,7 +68,7 @@ public final class TerminalSurface {
             @Override
             public void onSurfaceDestroyed() {
                 stopRequested = true;
-                stopRuntime();
+                stopSvc();
             }
         });
         view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
@@ -87,11 +87,11 @@ public final class TerminalSurface {
         pendingResize = true;
     }
 
-    private synchronized void stopRuntime() {
+    private synchronized void stopSvc() {
         if (!termStarted) {
             return;
         }
-        termRt.stop();
+        termSvc.stop();
         termStarted = false;
         stopRequested = false;
         texture = 0;

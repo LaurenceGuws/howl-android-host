@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="userland_log_tag">howl.userland</string>
+    <string name="userland_app_root">/data/data/%1$s</string>
+    <string name="userland_prefix_suffix">/files/usr</string>
+    <string name="userland_home_suffix">/files/home</string>
+    <string name="userland_tmp_suffix">/cache/tmp</string>
+    <string name="userland_howl_pm_suffix">/bin/howl-pm</string>
+    <string name="userland_shell_suffix">/bin/bash</string>
+    <string name="userland_manifest_url">https://github.com/LaurenceGuws/howl-pm/releases/download/android-dev-2026.04.18.182005/android-dev-prefix.release.manifest.json</string>
+</resources>

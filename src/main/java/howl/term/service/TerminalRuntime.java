@@ -5,6 +5,7 @@ public final class TerminalRuntime {
     private static final String TAG = "howl.term.runtime";
     private static final boolean nativeReady;
     private boolean started;
+    private final UserlandRuntime userland;
 
     static {
         boolean loaded = false;
@@ -18,7 +19,8 @@ public final class TerminalRuntime {
         nativeReady = loaded;
     }
 
-    public TerminalRuntime() {
+    public TerminalRuntime(UserlandRuntime userlandCfg) {
+        this.userland = userlandCfg;
         this.started = false;
     }
 
@@ -30,6 +32,9 @@ public final class TerminalRuntime {
         final int rc = nativeStart();
         started = rc == 0;
         android.util.Log.i(TAG, "runtime.start rc=" + rc);
+        if (started) {
+            android.util.Log.i(TAG, "runtime.config shell=" + userland.getShell() + " prefix=" + userland.getPrefix());
+        }
         return started;
     }
 

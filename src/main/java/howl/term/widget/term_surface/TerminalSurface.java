@@ -2,6 +2,7 @@ package howl.term.widget.term_surface;
 
 import howl.term.service.GpuRuntime;
 import howl.term.service.TerminalRuntime;
+import howl.term.service.UserlandRuntime;
 
 /** Starts GPU runtime */
 public final class TerminalSurface {
@@ -9,13 +10,15 @@ public final class TerminalSurface {
     private final GpuRuntime gpuRt;
     private final TerminalRuntime termRt;
     private boolean termStarted;
+    private boolean stopRequested;
     private int lastCols;
     private int lastRows;
 
-    public TerminalSurface() {
+    public TerminalSurface(UserlandRuntime userland) {
         this.gpuRt = new GpuRuntime();
-        this.termRt = new TerminalRuntime();
+        this.termRt = new TerminalRuntime(userland);
         this.termStarted = false;
+        this.stopRequested = false;
         this.lastCols = 0;
         this.lastRows = 0;
     }
@@ -24,6 +27,7 @@ public final class TerminalSurface {
         return gpuRt.surface(activity, new GpuRuntime.FrameHooks() {
             @Override
             public void onSurfaceCreated() {
+                stopRequested = false;
                 termStarted = termRt.start();
             }
 
@@ -41,6 +45,15 @@ public final class TerminalSurface {
 
             @Override
             public void onDrawFrame() {
+                if (stopRequested && termStarted) {
+                    termRt.stop();
+                    termStarted = false;
+                    stopRequested = false;
+                    lastCols = 0;
+                    lastRows = 0;
+                    android.util.Log.i(TAG, "runtime.stop surface_destroyed");
+                    return;
+                }
                 if (!termStarted) return;
                 final int rc = termRt.tick();
                 if (rc < 0) {
@@ -50,12 +63,7 @@ public final class TerminalSurface {
 
             @Override
             public void onSurfaceDestroyed() {
-                if (!termStarted) return;
-                termRt.stop();
-                termStarted = false;
-                lastCols = 0;
-                lastRows = 0;
-                android.util.Log.i(TAG, "runtime.stop surface_destroyed");
+                stopRequested = true;
             }
         });
     }

@@ -1,12 +1,12 @@
 package howl.term.widget.term_surface;
 
-import howl.term.obj.android.GpuRuntime;
+import howl.term.service.GpuRuntime;
 
 /** Starts GPU runtime */
-public final class Surface {
+public final class TerminalSurface {
     private final GpuRuntime gpu;
 
-    public Surface() {
+    public TerminalSurface() {
         this.gpu = new GpuRuntime();
     }
 

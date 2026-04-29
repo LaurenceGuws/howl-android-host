@@ -1,29 +1,29 @@
 package howl.term;
 
-import howl.term.obj.android.WindowRuntime;
-import howl.term.obj.android.userland.Runtime;
+import howl.term.service.WindowRuntime;
+import howl.term.service.UserlandRuntime;
 import howl.term.widget.assist_bar.AssistBar;
 import howl.term.widget.side_panel.SidePanel;
-import howl.term.widget.term_surface.Surface;
+import howl.term.widget.term_surface.TerminalSurface;
 
 /** App activity. */
 public final class Main extends android.app.Activity {
     private final WindowRuntime window = new WindowRuntime();
-    private Surface surface;
+    private TerminalSurface surface;
     private AssistBar assistBar;
     private SidePanel sidePanel;
-    private Runtime runtime;
+    private UserlandRuntime useland_rt;
 
     @Override
     protected void onCreate(android.os.Bundle bundle) {
         super.onCreate(bundle);
-        runtime = new Runtime();
+        useland_rt = new UserlandRuntime();
 
         final android.widget.FrameLayout root = window.root(this);
         final android.widget.FrameLayout surfaceBox = window.container(this);
         final android.view.View edge = window.container(this);
 
-        surface = new Surface();
+        surface = new TerminalSurface();
         assistBar = new AssistBar(this, window);
         sidePanel = new SidePanel(this, window);
         window.mount(root, surfaceBox, window.fill());

@@ -1,4 +1,4 @@
-package howl.term.obj.android.userland;
+package howl.term.service;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -7,7 +7,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
 /** Android host userland runtime skeleton. */
-public final class Runtime {
+public final class UserlandRuntime {
     private static final String TAG = "howl.userland";
     private static final String PACKAGE_NAME = "howl.term";
     private static final String PREFIX = "/data/data/" + PACKAGE_NAME + "/files/usr";
@@ -18,7 +18,7 @@ public final class Runtime {
     private static final String MANIFEST_URL =
             "https://github.com/LaurenceGuws/howl-pm/releases/download/android-dev-2026.04.18.182005/android-dev-prefix.release.manifest.json";
 
-    public Runtime() {
+    public UserlandRuntime() {
         android.util.Log.i(TAG, "userland.init.01 runtime.constructed");
         new Thread(this::initUserland, "howl-userland-init").start();
     }

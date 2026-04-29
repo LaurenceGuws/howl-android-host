@@ -1,4 +1,4 @@
-package howl.term.obj.android;
+package howl.term.service;
 
 /** Android window wrappers. */
 public final class WindowRuntime {

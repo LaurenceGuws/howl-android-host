@@ -1,7 +1,7 @@
 package howl.term.widget.side_panel;
 
-import howl.term.obj.android.InputRuntime;
-import howl.term.obj.android.WindowRuntime;
+import howl.term.service.InputRuntime;
+import howl.term.service.WindowRuntime;
 
 /** Left slide-out widget. */
 public final class SidePanel {

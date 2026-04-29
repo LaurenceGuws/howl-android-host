@@ -1,4 +1,4 @@
-package howl.term.obj.android;
+package howl.term.service;
 
 /** Android input wrappers. */
 public final class InputRuntime {

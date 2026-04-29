@@ -1,6 +1,6 @@
 package howl.term.widget.assist_bar;
 
-import howl.term.obj.android.WindowRuntime;
+import howl.term.service.WindowRuntime;
 
 /** Bottom assist bar widget. */
 public final class AssistBar {

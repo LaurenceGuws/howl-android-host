@@ -4,7 +4,6 @@ package howl.term.service;
 public final class TerminalSvc {
     private static final String TAG = "howl.term.runtime";
     private static final boolean Ready;
-    private static final byte[] PROOF_CMD = "printf \"howl-proof\\n\"\\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
     public enum LifecycleState {
         STOPPED,
         STARTING,
@@ -41,12 +40,6 @@ public final class TerminalSvc {
         started = rc == 0;
         if (rc != 0) {
             android.util.Log.e(TAG, "Start failed rc=" + rc);
-            state = LifecycleState.FAILED;
-            return false;
-        }
-        final int proofRc = FeedBytes(PROOF_CMD, PROOF_CMD.length);
-        if (proofRc != 0) {
-            android.util.Log.e(TAG, "proof command feed failed rc=" + proofRc);
             state = LifecycleState.FAILED;
             return false;
         }
@@ -116,5 +109,4 @@ public final class TerminalSvc {
     private static native int RenderFrame(int width, int height, int texture);
     private static native int ConfigurePty(String shell, String command);
     private static native int HasOutputProof();
-    private static native int FeedBytes(byte[] bytes, int len);
 }

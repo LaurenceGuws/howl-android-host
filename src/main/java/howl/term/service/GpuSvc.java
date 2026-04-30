@@ -20,6 +20,8 @@ public class GpuSvc {
     private int uvHandle;
     private int samplerHandle;
     private FloatBuffer quadBuffer;
+    private int textureWidth;
+    private int textureHeight;
 
     public GpuSvc() {
         this.texture = 0;
@@ -28,6 +30,8 @@ public class GpuSvc {
         this.uvHandle = -1;
         this.samplerHandle = -1;
         this.quadBuffer = null;
+        this.textureWidth = 1;
+        this.textureHeight = 1;
     }
 
     public android.view.View surface(android.app.Activity activity, FrameHooks hooks) {
@@ -91,11 +95,37 @@ public class GpuSvc {
                 GLES20.GL_UNSIGNED_BYTE,
                 ByteBuffer.wrap(pixel)
         );
+        textureWidth = 1;
+        textureHeight = 1;
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
     }
 
     public int texture() {
         return texture;
+    }
+
+    public void ensureTextureSize(int width, int height) {
+        if (texture == 0) return;
+        final int w = Math.max(1, width);
+        final int h = Math.max(1, height);
+        if (w == textureWidth && h == textureHeight) {
+            return;
+        }
+        textureWidth = w;
+        textureHeight = h;
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+        GLES20.glTexImage2D(
+                GLES20.GL_TEXTURE_2D,
+                0,
+                GLES20.GL_RGBA,
+                textureWidth,
+                textureHeight,
+                0,
+                GLES20.GL_RGBA,
+                GLES20.GL_UNSIGNED_BYTE,
+                null
+        );
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
     }
 
     private void draw() {

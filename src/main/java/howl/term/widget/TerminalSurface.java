@@ -49,6 +49,7 @@ public final class TerminalSurface {
 
             @Override
             public void onSurfaceChanged(int width, int height) {
+                gpuSvc.ensureTextureSize(width, height);
                 scheduleResize(width, height);
             }
 
@@ -65,10 +66,6 @@ public final class TerminalSurface {
                         Math.max(1, pendingHeight),
                         texture
                 );
-                if (!outputProofLogged && termSvc.hasOutputProof()) {
-                    outputProofLogged = true;
-                    android.util.Log.e(TAG, "proof.output_seen");
-                }
                 if (rc < 0) {
                     android.util.Log.e(TAG, "runtime.render rc=" + rc + " state=" + termSvc.state());
                 }

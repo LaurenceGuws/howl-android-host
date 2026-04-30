@@ -37,6 +37,7 @@ public class GpuSvc {
     public android.view.View surface(android.app.Activity activity, FrameHooks hooks) {
         final GLSurfaceView view = new GLSurfaceView(activity);
         view.setEGLContextClientVersion(2);
+        view.setPreserveEGLContextOnPause(true);
         view.setRenderer(new GLSurfaceView.Renderer() {
             @Override
             public void onSurfaceCreated(javax.microedition.khronos.opengles.GL10 gl, javax.microedition.khronos.egl.EGLConfig config) {

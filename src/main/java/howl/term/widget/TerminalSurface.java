@@ -157,6 +157,21 @@ public final class TerminalSurface {
         return view;
     }
 
+    public void onPause() {
+        final android.view.View v = surfaceView;
+        if (v instanceof android.opengl.GLSurfaceView glView) {
+            glView.onPause();
+        }
+    }
+
+    public void onResume() {
+        final android.view.View v = surfaceView;
+        if (v instanceof android.opengl.GLSurfaceView glView) {
+            glView.onResume();
+            gpuSvc.requestRender(glView);
+        }
+    }
+
     private void scheduleRenderResize(int width, int height) {
         pendingRenderWidth = width;
         pendingRenderHeight = height;
@@ -178,7 +193,14 @@ public final class TerminalSurface {
             return;
         }
         wakeThreadRunning = false;
-        if (wakeThread != null) wakeThread.interrupt();
+        final Thread t = wakeThread;
+        if (t != null) {
+            t.interrupt();
+            try {
+                t.join(200);
+            } catch (InterruptedException ignored) {}
+        }
+        wakeThread = null;
         termSvc.stop();
         termStarted = false;
         stopRequested = false;
@@ -191,8 +213,9 @@ public final class TerminalSurface {
         wakeThreadRunning = true;
         wakeThread = new Thread(() -> {
             while (wakeThreadRunning && termStarted && !stopRequested) {
-                final int rc = termSvc.waitForWake(1000);
+                final int rc = termSvc.waitForWake(100);
                 if (!wakeThreadRunning || !termStarted || stopRequested) break;
+                if (rc < 0) break;
                 if (rc > 0) {
                     final android.view.View v = surfaceView;
                     if (v != null) v.post(() -> gpuSvc.requestRender(v));

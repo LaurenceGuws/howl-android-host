@@ -47,6 +47,25 @@ public final class TerminalSvc {
         return started;
     }
 
+    public boolean configurePty(String shellPath, String command) {
+        if (!Ready) {
+            state = LifecycleState.FAILED;
+            return false;
+        }
+        if (shellPath == null || shellPath.isEmpty()) {
+            android.util.Log.e(TAG, "configurePty invalid shell path");
+            state = LifecycleState.FAILED;
+            return false;
+        }
+        final int rc = ConfigurePty(shellPath, command);
+        if (rc != 0) {
+            android.util.Log.e(TAG, "ConfigurePty failed rc=" + rc);
+            state = LifecycleState.FAILED;
+            return false;
+        }
+        return true;
+    }
+
     public void stop() {
         if (!Ready || !started) {
             state = LifecycleState.STOPPED;
@@ -81,4 +100,5 @@ public final class TerminalSvc {
     private static native int Start();
     private static native void Stop();
     private static native int RenderFrame(int width, int height, int texture);
+    private static native int ConfigurePty(String shell, String command);
 }

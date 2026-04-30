@@ -22,6 +22,9 @@ public final class TerminalSurface {
             throw new IllegalArgumentException("userland runtime required");
         }
         this.termSvc = new TerminalSvc();
+        if (!this.termSvc.configurePty(userland.getShell(), null)) {
+            android.util.Log.e(TAG, "runtime pty configure failed");
+        }
         this.pendingWidth = 0;
         this.pendingHeight = 0;
         this.pendingResize = false;

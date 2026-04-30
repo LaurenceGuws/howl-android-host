@@ -69,7 +69,14 @@ public class GpuSvc {
                 hooks.onSurfaceDestroyed();
             }
         });
+        view.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         return view;
+    }
+
+    public void requestRender(android.view.View view) {
+        if (view instanceof GLSurfaceView glView) {
+            glView.requestRender();
+        }
     }
 
     private void initTexture() {

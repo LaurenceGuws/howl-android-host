@@ -15,6 +15,9 @@ public final class Main extends android.app.Activity {
     private AssistBar assistBar;
     private SidePanel sidePanel;
     private UserlandSvc userlandSvc;
+    private android.view.View rootView;
+    private int leftEdgePx;
+    private int bottomEdgePx;
 
     @Override
     protected void onCreate(android.os.Bundle bundle) {
@@ -24,24 +27,27 @@ public final class Main extends android.app.Activity {
 
         final android.widget.FrameLayout root = winSvc.root(this);
         final android.widget.FrameLayout surfaceBox = winSvc.container(this);
-        final android.view.View leftEdge = winSvc.container(this);
+        final int assistBarDp = 66;
+        final int assistBarPx = Math.round(assistBarDp * getResources().getDisplayMetrics().density);
+        final float density = getResources().getDisplayMetrics().density;
+        leftEdgePx = Math.round(24 * density);
+        bottomEdgePx = Math.round(54 * density);
 
         termSfc = new TerminalSurface(userlandSvc);
         assistBar = new AssistBar(this, winSvc);
         sidePanel = new SidePanel(this, winSvc);
-        winSvc.mount(root, surfaceBox, winSvc.fill());
+        final android.widget.FrameLayout.LayoutParams surfaceParams = winSvc.fill();
+        surfaceParams.bottomMargin = assistBarPx;
+        winSvc.mount(root, surfaceBox, surfaceParams);
         winSvc.mount(root, sidePanel.view(), winSvc.leftPanel(this, 280));
-        winSvc.mount(root, assistBar.view(), winSvc.bottomBar(this, 66));
-        winSvc.mount(root, leftEdge, new android.widget.FrameLayout.LayoutParams(
-                Math.round(24 * getResources().getDisplayMetrics().density),
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
-        ));
+        winSvc.mount(root, assistBar.view(), winSvc.bottomBar(this, assistBarDp));
         winSvc.mount(surfaceBox, termSfc.view(this), winSvc.fill());
-        inputSvc.bindSwipeUpFromBottom(root, Math.round(54 * getResources().getDisplayMetrics().density), assistBar::show);
-        sidePanel.bindOpen(leftEdge);
+        sidePanel.view().setZ(20f);
+        assistBar.view().setZ(10f);
         sidePanel.bindClose();
         winSvc.keepScreenOn(this);
         winSvc.setContent(this, root);
+        rootView = root;
     }
 
     @Override
@@ -55,5 +61,21 @@ public final class Main extends android.app.Activity {
     @Override
     protected void onResume() {
         super.onResume();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+        if (rootView != null && sidePanel != null && assistBar != null) {
+            final boolean consumedByShell = inputSvc.handleAppShellTouch(
+                    rootView,
+                    event,
+                    leftEdgePx,
+                    bottomEdgePx,
+                    sidePanel::open,
+                    assistBar::show
+            );
+            if (consumedByShell) return true;
+        }
+        return super.dispatchTouchEvent(event);
     }
 }

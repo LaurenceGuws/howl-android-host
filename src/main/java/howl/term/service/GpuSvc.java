@@ -69,7 +69,6 @@ public class GpuSvc {
                 hooks.onSurfaceDestroyed();
             }
         });
-        view.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
         return view;
     }
 

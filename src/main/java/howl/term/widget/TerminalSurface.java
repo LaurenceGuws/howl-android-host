@@ -57,17 +57,6 @@ public final class TerminalSurface {
             public void onDrawFrame() {
                 if (stopRequested && termStarted) {
                     stopSvc();
-                    return;
-                }
-                if (!termStarted) return;
-                if (pendingResize) pendingResize = false;
-                final int rc = termSvc.renderFrame(
-                        Math.max(1, pendingWidth),
-                        Math.max(1, pendingHeight),
-                        texture
-                );
-                if (rc < 0) {
-                    android.util.Log.e(TAG, "runtime.render rc=" + rc + " state=" + termSvc.state());
                 }
             }
 

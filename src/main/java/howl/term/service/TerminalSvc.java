@@ -127,6 +127,12 @@ public final class TerminalSvc {
         return DirtyState(handle);
     }
 
+    public int feedBytes(byte[] data) {
+        if (!Ready || !started) return -1;
+        if (data == null || data.length == 0) return 0;
+        return FeedBytes(handle, data);
+    }
+
     public int acknowledgePresented() {
         if (!Ready || !started) return -1;
         return AcknowledgePresented(handle);
@@ -152,6 +158,7 @@ public final class TerminalSvc {
     private static native void Destroy(long handle);
     private static native int RenderFrame(long handle, int width, int height, int texture);
     private static native int RenderFrameSized(long handle, int renderWidth, int renderHeight, int gridWidth, int gridHeight, int texture);
+    private static native int FeedBytes(long handle, byte[] data);
     private static native int DirtyState(long handle);
     private static native int AcknowledgePresented(long handle);
     private static native int WaitForWake(long handle, int timeoutMs);

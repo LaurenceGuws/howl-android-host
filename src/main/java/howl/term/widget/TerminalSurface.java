@@ -59,6 +59,7 @@ public final class TerminalSurface {
                 } else {
                     startWakeThread();
                 }
+                if (viewRef[0] != null) viewRef[0].requestFocus();
                 if (viewRef[0] != null) gpuSvc.requestRender(viewRef[0]);
             }
 
@@ -117,6 +118,31 @@ public final class TerminalSurface {
                 stopSvc();
             }
         });
+        view.setFocusable(true);
+        view.setFocusableInTouchMode(true);
+        view.setClickable(true);
+        view.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) return false;
+            byte[] bytes = null;
+            if (keyCode == android.view.KeyEvent.KEYCODE_ENTER) bytes = new byte[] { '\r' };
+            if (keyCode == android.view.KeyEvent.KEYCODE_DEL) bytes = new byte[] { 0x7f };
+            if (keyCode == android.view.KeyEvent.KEYCODE_TAB) bytes = new byte[] { '\t' };
+            if (bytes == null) {
+                final int codepoint = event.getUnicodeChar();
+                if (codepoint > 0 && !Character.isISOControl(codepoint)) {
+                    final String s = new String(Character.toChars(codepoint));
+                    bytes = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                }
+            }
+            if (bytes == null || bytes.length == 0) return false;
+            final int rc = termSvc.feedBytes(bytes);
+            if (rc < 0) {
+                android.util.Log.e(TAG, "runtime.feedBytes rc=" + rc);
+                return false;
+            }
+            gpuSvc.requestRender(v);
+            return true;
+        });
         view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             final int width = right - left;
             final int height = bottom - top;
@@ -127,6 +153,7 @@ public final class TerminalSurface {
         });
         viewRef[0] = view;
         surfaceView = view;
+        view.requestFocus();
         return view;
     }
 

@@ -15,6 +15,7 @@ public final class TerminalSurface {
     private int texture;
     private boolean termStarted;
     private boolean stopRequested;
+    private boolean outputProofLogged;
 
     public TerminalSurface(UserlandSvc userland) {
         this.gpuSvc = new GpuSvc();
@@ -31,6 +32,7 @@ public final class TerminalSurface {
         this.texture = 0;
         this.termStarted = false;
         this.stopRequested = false;
+        this.outputProofLogged = false;
     }
 
     public android.view.View view(android.app.Activity activity) {
@@ -63,6 +65,10 @@ public final class TerminalSurface {
                         Math.max(1, pendingHeight),
                         texture
                 );
+                if (!outputProofLogged && termSvc.hasOutputProof()) {
+                    outputProofLogged = true;
+                    android.util.Log.e(TAG, "proof.output_seen");
+                }
                 if (rc < 0) {
                     android.util.Log.e(TAG, "runtime.render rc=" + rc + " state=" + termSvc.state());
                 }
@@ -98,5 +104,6 @@ public final class TerminalSurface {
         termStarted = false;
         stopRequested = false;
         texture = 0;
+        outputProofLogged = false;
     }
 }

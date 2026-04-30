@@ -38,7 +38,7 @@ public final class TerminalSurface {
                 texture = gpuSvc.texture();
                 termStarted = termSvc.start();
                 if (!termStarted) {
-                    android.util.Log.e(TAG, "runtime start failed");
+                    android.util.Log.e(TAG, "runtime start failed state=" + termSvc.state());
                 }
             }
 
@@ -61,7 +61,7 @@ public final class TerminalSurface {
                         texture
                 );
                 if (rc < 0) {
-                    android.util.Log.e(TAG, "runtime.render rc=" + rc);
+                    android.util.Log.e(TAG, "runtime.render rc=" + rc + " state=" + termSvc.state());
                 }
             }
 

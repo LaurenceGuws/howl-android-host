@@ -3,6 +3,7 @@ package howl.term;
 import howl.term.service.Input;
 import howl.term.service.Window;
 import howl.term.service.Userland;
+import howl.term.service.Config;
 import howl.term.widget.AssistBar;
 import howl.term.widget.SidePanel;
 import howl.term.widget.TermInstance;
@@ -21,6 +22,7 @@ public final class Main extends android.app.Activity {
         super.onCreate(bundle);
         userland = new Userland(this);
         userland.start();
+        final Config cfg = Config.load(this);
 
         final android.widget.FrameLayout root = win.root(this);
         final android.widget.FrameLayout appWindow = win.container(this);
@@ -33,7 +35,7 @@ public final class Main extends android.app.Activity {
         final int assistBarPx = Math.round(assistBarDp * getResources().getDisplayMetrics().density);
         final int bottomEdgePx = Math.round(54 * getResources().getDisplayMetrics().density);
 
-        termInst = new TermInstance(userland);
+        termInst = new TermInstance(userland, cfg);
         assistBar = new AssistBar(this, win);
         sidePanel = new SidePanel(this, win);
         final android.widget.FrameLayout.LayoutParams surfaceParams = win.fill();

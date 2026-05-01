@@ -3,6 +3,7 @@ package howl.term.widget;
 import howl.term.service.Gpu;
 import howl.term.service.Terminal;
 import howl.term.service.Userland;
+import howl.term.service.Config;
 
 /** Starts GPU runtime */
 public final class TermInstance {
@@ -11,6 +12,7 @@ public final class TermInstance {
     private final Gpu.State gpuState;
     private final Terminal term;
     private final Userland userland;
+    private final Config cfg;
     private volatile int pendingRenderWidth;
     private volatile int pendingRenderHeight;
     private volatile int pendingGridWidth;
@@ -25,13 +27,17 @@ public final class TermInstance {
     private Thread wakeThread;
     private final java.util.concurrent.atomic.AtomicBoolean renderQueued;
 
-    public TermInstance(Userland userland) {
+    public TermInstance(Userland userland, Config cfg) {
         this.gpu = new Gpu();
         this.gpuState = new Gpu.State();
         if (userland == null) {
             throw new IllegalArgumentException("userland runtime required");
         }
+        if (cfg == null) {
+            throw new IllegalArgumentException("host config required");
+        }
         this.userland = userland;
+        this.cfg = cfg;
         this.term = new Terminal();
         this.pendingRenderWidth = 0;
         this.pendingRenderHeight = 0;
@@ -50,8 +56,9 @@ public final class TermInstance {
 
     public android.view.View view(android.app.Activity activity) {
         final android.util.DisplayMetrics dm = activity.getResources().getDisplayMetrics();
-        final int cellWidthPx = Math.max(12, Math.round(8.0f * dm.density));
-        final int cellHeightPx = Math.max(24, Math.round(16.0f * dm.density));
+        final int fontPx = Math.max(8, Math.round(cfg.term.fontSizeSp * dm.density));
+        final int cellWidthPx = Math.max(4, fontPx / 2);
+        final int cellHeightPx = fontPx;
         term.configureCellSizePx(cellWidthPx, cellHeightPx);
         final android.view.View[] viewRef = new android.view.View[1];
         final android.view.View view = gpu.surface(activity, gpuState, new Gpu.FrameHooks() {
@@ -61,8 +68,8 @@ public final class TermInstance {
                 surfaceReady = false;
                 texture = gpu.texture(gpuState);
                 final boolean userlandReady = userland.waitUntilReady(4000);
-                String shell = userland.getShell();
-                String command = userland.buildShellCommand();
+                String shell = cfg.term.shell != null ? cfg.term.shell : userland.getShell();
+                String command = cfg.term.command != null ? cfg.term.command : userland.buildShellCommand();
                 if (!userlandReady) {
                     android.util.Log.e(TAG, "userland not ready; using fallback shell");
                     shell = "/system/bin/sh";

@@ -57,48 +57,22 @@ public class GpuSvc {
                         | EditorInfo.IME_FLAG_NO_FULLSCREEN
                         | EditorInfo.IME_ACTION_NONE;
                 return new BaseInputConnection(this, false) {
-                    private long lastPublishNs = 0L;
-                    private String lastPublishText = "";
-                    private String composingText = "";
-
-                    private void publishText(CharSequence text, String source) {
+                    private void publishText(CharSequence text) {
                         if (text == null || text.length() == 0) return;
                         final String s = text.toString();
-                        final long now = System.nanoTime();
-                        // Prevent duplicate publish for keyboards that emit both commit and key paths.
-                        if (s.equals(lastPublishText) && (now - lastPublishNs) < 30_000_000L) {
-                            return;
-                        }
-                        lastPublishText = s;
-                        lastPublishNs = now;
                         hooks.onInputBytes(s.getBytes(StandardCharsets.UTF_8));
                     }
 
                     @Override
                     public boolean commitText(CharSequence text, int newCursorPosition) {
-                        publishText(text, "imeCommit");
-                        composingText = "";
+                        publishText(text);
                         return true;
                     }
 
                     @Override
                     public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                        final String next = text == null ? "" : text.toString();
-                        final int len = next.length();
-                        if (len > 0) {
-                        }
-                        if (!next.isEmpty()) {
-                            if (next.startsWith(composingText)) {
-                                final String delta = next.substring(composingText.length());
-                                if (!delta.isEmpty()) {
-                                    publishText(delta, "imeComposeDelta");
-                                }
-                            } else if (!composingText.startsWith(next)) {
-                                // Compose reset/replacement: send fresh compose text once.
-                                publishText(next, "imeComposeReset");
-                            }
-                        }
-                        composingText = next;
+                        // Composition updates are pre-commit editor state.
+                        // Do not publish them as terminal input.
                         return true;
                     }
 
@@ -107,10 +81,6 @@ public class GpuSvc {
                         if (beforeLength > 0) {
                             for (int i = 0; i < beforeLength; i++) {
                                 hooks.onInputBytes(new byte[] { 0x7f });
-                            }
-                            if (!composingText.isEmpty()) {
-                                final int keep = Math.max(0, composingText.length() - beforeLength);
-                                composingText = composingText.substring(0, keep);
                             }
                             return true;
                         }
@@ -127,9 +97,8 @@ public class GpuSvc {
                         }
                         final int codepoint = event.getUnicodeChar();
                         if (codepoint > 0 && !Character.isISOControl(codepoint)) {
-                            final String s = new String(Character.toChars(codepoint));
-                            publishText(s, "imeKey");
-                            return true;
+                            // Printable text should arrive via commitText.
+                            return false;
                         }
                         return super.sendKeyEvent(event);
                     }

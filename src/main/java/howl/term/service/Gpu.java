@@ -11,8 +11,31 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.charset.StandardCharsets;
+
 /** Presents a single gpu texture */
 public class Gpu {
+    public static final class State {
+        public int texture;
+        public int program;
+        public int posHandle;
+        public int uvHandle;
+        public int samplerHandle;
+        public FloatBuffer quadBuffer;
+        public int textureWidth;
+        public int textureHeight;
+
+        public State() {
+            texture = 0;
+            program = 0;
+            posHandle = -1;
+            uvHandle = -1;
+            samplerHandle = -1;
+            quadBuffer = null;
+            textureWidth = 1;
+            textureHeight = 1;
+        }
+    }
+
     public interface FrameHooks {
         void onSurfaceCreated();
         void onSurfaceChanged(int width, int height);
@@ -21,41 +44,17 @@ public class Gpu {
         void onInputBytes(byte[] bytes);
     }
 
-    private int texture;
-    private int program;
-    private int posHandle;
-    private int uvHandle;
-    private int samplerHandle;
-    private FloatBuffer quadBuffer;
-    private int textureWidth;
-    private int textureHeight;
+    public Gpu() {}
 
-    public Gpu() {
-        this.texture = 0;
-        this.program = 0;
-        this.posHandle = -1;
-        this.uvHandle = -1;
-        this.samplerHandle = -1;
-        this.quadBuffer = null;
-        this.textureWidth = 1;
-        this.textureHeight = 1;
-    }
-
-    public android.view.View surface(android.app.Activity activity, FrameHooks hooks) {
+    public android.view.View surface(android.app.Activity activity, State state, FrameHooks hooks) {
         final GLSurfaceView view = new GLSurfaceView(activity) {
             @Override
-            public boolean onCheckIsTextEditor() {
-                return true;
-            }
+            public boolean onCheckIsTextEditor() { return true; }
 
             @Override
             public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
-                outAttrs.inputType = InputType.TYPE_CLASS_TEXT
-                        | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                        | InputType.TYPE_TEXT_FLAG_MULTI_LINE;
-                outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
-                        | EditorInfo.IME_FLAG_NO_FULLSCREEN
-                        | EditorInfo.IME_ACTION_NONE;
+                outAttrs.inputType = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS | InputType.TYPE_TEXT_FLAG_MULTI_LINE;
+                outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN | EditorInfo.IME_ACTION_NONE;
                 return new BaseInputConnection(this, false) {
                     private static final String SENTINEL = "........";
                     private final StringBuilder editorBuffer = new StringBuilder();
@@ -64,18 +63,14 @@ public class Gpu {
                     private int editorComposingEnd = -1;
                     private String suppressedCommitText = null;
 
-                    {
-                        resetEditorState();
-                    }
+                    { resetEditorState(); }
 
                     private void publishText(CharSequence text) {
                         if (text == null || text.length() == 0) return;
                         hooks.onInputBytes(text.toString().getBytes(StandardCharsets.UTF_8));
                     }
 
-                    private void sendCodepoint(int cp) {
-                        publishText(new String(Character.toChars(cp)));
-                    }
+                    private void sendCodepoint(int cp) { publishText(new String(Character.toChars(cp))); }
 
                     private void resetEditorState() {
                         editorBuffer.setLength(0);
@@ -98,13 +93,8 @@ public class Gpu {
                         return "";
                     }
 
-                    private int currentCompositionStart() {
-                        return editorComposingStart >= 0 ? editorComposingStart : editorCursor;
-                    }
-
-                    private int currentCompositionEnd() {
-                        return (editorComposingEnd >= editorComposingStart && editorComposingStart >= 0) ? editorComposingEnd : editorCursor;
-                    }
+                    private int currentCompositionStart() { return editorComposingStart >= 0 ? editorComposingStart : editorCursor; }
+                    private int currentCompositionEnd() { return (editorComposingEnd >= editorComposingStart && editorComposingStart >= 0) ? editorComposingEnd : editorCursor; }
 
                     private static int sharedPrefixLength(String left, String right) {
                         int n = 0;
@@ -134,23 +124,17 @@ public class Gpu {
                         return true;
                     }
 
-                    private void clearComposition() {
-                        editorComposingStart = -1;
-                        editorComposingEnd = -1;
-                    }
+                    private void clearComposition() { editorComposingStart = -1; editorComposingEnd = -1; }
 
                     private void replaceComposition(String next) {
                         final String previous = currentCompositionText();
                         final int composeStart = currentCompositionStart();
                         final int oldEnd = currentCompositionEnd();
                         final int commonPrefix = sharedPrefixLength(previous, next);
-
                         final int backspaces = previous.length() - commonPrefix;
                         for (int i = 0; i < backspaces; i++) sendCodepoint('\u007f');
-
                         final String appended = next.substring(commonPrefix);
                         if (!appended.isEmpty()) publishText(appended);
-
                         editorBuffer.delete(composeStart, oldEnd);
                         editorBuffer.insert(composeStart, next);
                         editorComposingStart = composeStart;
@@ -174,21 +158,9 @@ public class Gpu {
                         return true;
                     }
 
-                    @Override
-                    public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                        return applyImeText(text == null ? "" : text.toString(), false);
-                    }
-
-                    @Override
-                    public boolean finishComposingText() {
-                        clearComposition();
-                        return true;
-                    }
-
-                    @Override
-                    public boolean commitText(CharSequence text, int newCursorPosition) {
-                        return applyImeText(text == null ? "" : text.toString(), true);
-                    }
+                    @Override public boolean setComposingText(CharSequence text, int newCursorPosition) { return applyImeText(text == null ? "" : text.toString(), false); }
+                    @Override public boolean finishComposingText() { clearComposition(); return true; }
+                    @Override public boolean commitText(CharSequence text, int newCursorPosition) { return applyImeText(text == null ? "" : text.toString(), true); }
 
                     @Override
                     public boolean deleteSurroundingText(int beforeLength, int afterLength) {
@@ -216,9 +188,7 @@ public class Gpu {
 
                     @Override
                     public boolean sendKeyEvent(KeyEvent event) {
-                        if (shouldBypassImePrintableKeyEvent(event)) {
-                            return true;
-                        }
+                        if (shouldBypassImePrintableKeyEvent(event)) return true;
                         if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
                         final byte[] mapped = mapKeyEvent(event);
                         if (mapped != null && mapped.length > 0) {
@@ -238,12 +208,13 @@ public class Gpu {
                 };
             }
         };
+
         view.setEGLContextClientVersion(2);
         view.setPreserveEGLContextOnPause(true);
         view.setRenderer(new GLSurfaceView.Renderer() {
             @Override
             public void onSurfaceCreated(javax.microedition.khronos.opengles.GL10 gl, javax.microedition.khronos.egl.EGLConfig config) {
-                initTexture();
+                initTexture(state);
                 GLES20.glClearColor(0.06f, 0.09f, 0.14f, 1.0f);
                 hooks.onSurfaceCreated();
             }
@@ -257,20 +228,13 @@ public class Gpu {
             @Override
             public void onDrawFrame(javax.microedition.khronos.opengles.GL10 gl) {
                 hooks.onDrawFrame();
-                draw();
+                draw(state);
             }
         });
         view.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
-            @Override
-            public void surfaceCreated(android.view.SurfaceHolder holder) {}
-
-            @Override
-            public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {}
-
-            @Override
-            public void surfaceDestroyed(android.view.SurfaceHolder holder) {
-                hooks.onSurfaceDestroyed();
-            }
+            @Override public void surfaceCreated(android.view.SurfaceHolder holder) {}
+            @Override public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {}
+            @Override public void surfaceDestroyed(android.view.SurfaceHolder holder) { hooks.onSurfaceDestroyed(); }
         });
         view.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         return view;
@@ -280,7 +244,6 @@ public class Gpu {
         final int keyCode = event.getKeyCode();
         final boolean ctrl = event.isCtrlPressed();
         final boolean alt = event.isAltPressed();
-
         if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) return new byte[] { '\r' };
         if (keyCode == KeyEvent.KEYCODE_DEL) return new byte[] { 0x7f };
         if (keyCode == KeyEvent.KEYCODE_TAB) return new byte[] { '\t' };
@@ -307,7 +270,6 @@ public class Gpu {
         if (keyCode == KeyEvent.KEYCODE_F10) return "\u001b[21~".getBytes(StandardCharsets.UTF_8);
         if (keyCode == KeyEvent.KEYCODE_F11) return "\u001b[23~".getBytes(StandardCharsets.UTF_8);
         if (keyCode == KeyEvent.KEYCODE_F12) return "\u001b[24~".getBytes(StandardCharsets.UTF_8);
-
         if (ctrl) {
             final int cp = event.getUnicodeChar(KeyEvent.META_CTRL_ON);
             if (cp > 0 && cp <= 0x1f) return new byte[] { (byte) cp };
@@ -326,144 +288,96 @@ public class Gpu {
     }
 
     public void requestRender(android.view.View view) {
-        if (view instanceof GLSurfaceView glView) {
-            glView.requestRender();
-        }
+        if (view instanceof GLSurfaceView glView) glView.requestRender();
     }
 
-    public void resizeTexture(android.view.View view, int width, int height) {
+    public void resizeTexture(State state, android.view.View view, int width, int height) {
         if (!(view instanceof GLSurfaceView glView)) return;
         final int w = Math.max(1, width);
         final int h = Math.max(1, height);
-        glView.queueEvent(() -> ensureTextureSize(w, h));
+        glView.queueEvent(() -> ensureTextureSize(state, w, h));
     }
 
-    private void initTexture() {
-        if (texture != 0) return;
+    public int texture(State state) { return state.texture; }
+
+    public void ensureTextureSize(State state, int width, int height) {
+        if (state.texture == 0) return;
+        final int w = Math.max(1, width);
+        final int h = Math.max(1, height);
+        if (w == state.textureWidth && h == state.textureHeight) return;
+        state.textureWidth = w;
+        state.textureHeight = h;
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, state.texture);
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, state.textureWidth, state.textureHeight, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+    }
+
+    private void initTexture(State state) {
+        if (state.texture != 0) return;
         final int[] ids = new int[1];
         GLES20.glGenTextures(1, ids, 0);
-        texture = ids[0];
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+        state.texture = ids[0];
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, state.texture);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
         final byte[] pixel = new byte[] { 20, 28, 45, (byte) 255 };
-        GLES20.glTexImage2D(
-                GLES20.GL_TEXTURE_2D,
-                0,
-                GLES20.GL_RGBA,
-                1,
-                1,
-                0,
-                GLES20.GL_RGBA,
-                GLES20.GL_UNSIGNED_BYTE,
-                ByteBuffer.wrap(pixel)
-        );
-        textureWidth = 1;
-        textureHeight = 1;
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, 1, 1, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, ByteBuffer.wrap(pixel));
+        state.textureWidth = 1;
+        state.textureHeight = 1;
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
     }
 
-    public int texture() {
-        return texture;
-    }
-
-    public void ensureTextureSize(int width, int height) {
-        if (texture == 0) return;
-        final int w = Math.max(1, width);
-        final int h = Math.max(1, height);
-        if (w == textureWidth && h == textureHeight) {
-            return;
-        }
-        textureWidth = w;
-        textureHeight = h;
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
-        GLES20.glTexImage2D(
-                GLES20.GL_TEXTURE_2D,
-                0,
-                GLES20.GL_RGBA,
-                textureWidth,
-                textureHeight,
-                0,
-                GLES20.GL_RGBA,
-                GLES20.GL_UNSIGNED_BYTE,
-                null
-        );
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-    }
-
-    private void draw() {
-        if (program == 0) {
-            initProgram();
-        }
-        if (program == 0 || texture == 0) {
+    private void draw(State state) {
+        if (state.program == 0) initProgram(state);
+        if (state.program == 0 || state.texture == 0) {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
             return;
         }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        GLES20.glUseProgram(program);
+        GLES20.glUseProgram(state.program);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
-        GLES20.glUniform1i(samplerHandle, 0);
-        quadBuffer.position(0);
-        GLES20.glEnableVertexAttribArray(posHandle);
-        GLES20.glVertexAttribPointer(posHandle, 2, GLES20.GL_FLOAT, false, 16, quadBuffer);
-        quadBuffer.position(2);
-        GLES20.glEnableVertexAttribArray(uvHandle);
-        GLES20.glVertexAttribPointer(uvHandle, 2, GLES20.GL_FLOAT, false, 16, quadBuffer);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, state.texture);
+        GLES20.glUniform1i(state.samplerHandle, 0);
+        state.quadBuffer.position(0);
+        GLES20.glEnableVertexAttribArray(state.posHandle);
+        GLES20.glVertexAttribPointer(state.posHandle, 2, GLES20.GL_FLOAT, false, 16, state.quadBuffer);
+        state.quadBuffer.position(2);
+        GLES20.glEnableVertexAttribArray(state.uvHandle);
+        GLES20.glVertexAttribPointer(state.uvHandle, 2, GLES20.GL_FLOAT, false, 16, state.quadBuffer);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        GLES20.glDisableVertexAttribArray(posHandle);
-        GLES20.glDisableVertexAttribArray(uvHandle);
+        GLES20.glDisableVertexAttribArray(state.posHandle);
+        GLES20.glDisableVertexAttribArray(state.uvHandle);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
     }
 
-    private void initProgram() {
-        final String vertex =
-                "attribute vec2 aPos;\n" +
-                "attribute vec2 aUv;\n" +
-                "varying vec2 vUv;\n" +
-                "void main() {\n" +
-                "  gl_Position = vec4(aPos, 0.0, 1.0);\n" +
-                "  vUv = aUv;\n" +
-                "}\n";
-        final String fragment =
-                "precision mediump float;\n" +
-                "varying vec2 vUv;\n" +
-                "uniform sampler2D uTex;\n" +
-                "void main() {\n" +
-                "  gl_FragColor = texture2D(uTex, vUv);\n" +
-                "}\n";
+    private void initProgram(State state) {
+        final String vertex = "attribute vec2 aPos;\n" + "attribute vec2 aUv;\n" + "varying vec2 vUv;\n" + "void main() {\n" + "  gl_Position = vec4(aPos, 0.0, 1.0);\n" + "  vUv = aUv;\n" + "}\n";
+        final String fragment = "precision mediump float;\n" + "varying vec2 vUv;\n" + "uniform sampler2D uTex;\n" + "void main() {\n" + "  gl_FragColor = texture2D(uTex, vUv);\n" + "}\n";
         final int vs = compileShader(GLES20.GL_VERTEX_SHADER, vertex);
         final int fs = compileShader(GLES20.GL_FRAGMENT_SHADER, fragment);
         if (vs == 0 || fs == 0) return;
-        program = GLES20.glCreateProgram();
-        GLES20.glAttachShader(program, vs);
-        GLES20.glAttachShader(program, fs);
-        GLES20.glLinkProgram(program);
+        state.program = GLES20.glCreateProgram();
+        GLES20.glAttachShader(state.program, vs);
+        GLES20.glAttachShader(state.program, fs);
+        GLES20.glLinkProgram(state.program);
         final int[] linked = new int[1];
-        GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linked, 0);
+        GLES20.glGetProgramiv(state.program, GLES20.GL_LINK_STATUS, linked, 0);
         GLES20.glDeleteShader(vs);
         GLES20.glDeleteShader(fs);
         if (linked[0] == 0) {
-            GLES20.glDeleteProgram(program);
-            program = 0;
+            GLES20.glDeleteProgram(state.program);
+            state.program = 0;
             return;
         }
-        posHandle = GLES20.glGetAttribLocation(program, "aPos");
-        uvHandle = GLES20.glGetAttribLocation(program, "aUv");
-        samplerHandle = GLES20.glGetUniformLocation(program, "uTex");
-        final float[] verts = new float[] {
-                -1f, -1f, 0f, 0f,
-                1f, -1f, 1f, 0f,
-                -1f, 1f, 0f, 1f,
-                1f, 1f, 1f, 1f
-        };
-        quadBuffer = ByteBuffer.allocateDirect(verts.length * 4)
-                .order(ByteOrder.nativeOrder())
-                .asFloatBuffer();
-        quadBuffer.put(verts);
-        quadBuffer.position(0);
+        state.posHandle = GLES20.glGetAttribLocation(state.program, "aPos");
+        state.uvHandle = GLES20.glGetAttribLocation(state.program, "aUv");
+        state.samplerHandle = GLES20.glGetUniformLocation(state.program, "uTex");
+        final float[] verts = new float[] { -1f, -1f, 0f, 0f, 1f, -1f, 1f, 0f, -1f, 1f, 0f, 1f, 1f, 1f, 1f, 1f };
+        state.quadBuffer = ByteBuffer.allocateDirect(verts.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        state.quadBuffer.put(verts);
+        state.quadBuffer.position(0);
     }
 
     private int compileShader(int type, String source) {

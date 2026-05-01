@@ -8,6 +8,7 @@ import howl.term.service.Userland;
 public final class TermInstance {
     private static final String TAG = "howl.term.runtime";
     private final Gpu gpu;
+    private final Gpu.State gpuState;
     private final Terminal term;
     private final Userland userland;
     private volatile int pendingRenderWidth;
@@ -26,6 +27,7 @@ public final class TermInstance {
 
     public TermInstance(Userland userland) {
         this.gpu = new Gpu();
+        this.gpuState = new Gpu.State();
         if (userland == null) {
             throw new IllegalArgumentException("userland runtime required");
         }
@@ -52,12 +54,12 @@ public final class TermInstance {
         final int cellHeightPx = Math.max(24, Math.round(16.0f * dm.density));
         term.configureCellSizePx(cellWidthPx, cellHeightPx);
         final android.view.View[] viewRef = new android.view.View[1];
-        final android.view.View view = gpu.surface(activity, new Gpu.FrameHooks() {
+        final android.view.View view = gpu.surface(activity, gpuState, new Gpu.FrameHooks() {
             @Override
             public void onSurfaceCreated() {
                 stopRequested = false;
                 surfaceReady = false;
-                texture = gpu.texture();
+                texture = gpu.texture(gpuState);
                 final boolean userlandReady = userland.waitUntilReady(4000);
                 String shell = userland.getShell();
                 String command = userland.buildShellCommand();
@@ -83,7 +85,7 @@ public final class TermInstance {
 
             @Override
             public void onSurfaceChanged(int width, int height) {
-                gpu.ensureTextureSize(width, height);
+                gpu.ensureTextureSize(gpuState, width, height);
                 scheduleRenderResize(width, height);
                 surfaceReady = true;
                 requestRenderCoalesced(viewRef[0]);
@@ -169,7 +171,7 @@ public final class TermInstance {
             if (width != oldRight - oldLeft || height != oldBottom - oldTop) {
                 scheduleRenderResize(width, height);
                 scheduleGridResize(width, height);
-                gpu.resizeTexture(v, width, height);
+                gpu.resizeTexture(gpuState, v, width, height);
                 requestRenderCoalesced(v);
             }
         });

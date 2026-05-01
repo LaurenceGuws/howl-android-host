@@ -26,7 +26,11 @@ public final class Terminal {
         boolean loaded = false;
         try {
             System.loadLibrary("howl_term");
-            loaded = true;
+            final int bindRc = BindNativeMethods(Terminal.class);
+            loaded = bindRc == 0;
+            if (!loaded) {
+                throw new UnsatisfiedLinkError("BindNativeMethods failed rc=" + bindRc);
+            }
         } catch (UnsatisfiedLinkError err) {
             android.util.Log.e(TAG, "native load failed", err);
         }
@@ -184,4 +188,5 @@ public final class Terminal {
     private static native int PresentAck(long handle);
     private static native int WaitRenderWake(long handle, int timeoutMs);
     private static native int HasOutputProof(long handle);
+    private static native int BindNativeMethods(Class<?> cls);
 }

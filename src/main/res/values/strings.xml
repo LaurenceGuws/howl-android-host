@@ -7,5 +7,5 @@
     <string name="userland_tmp_suffix">/files/usr/tmp</string>
     <string name="userland_howl_pm_suffix">/bin/howl-pm</string>
     <string name="userland_shell_suffix">/bin/bash</string>
-    <string name="userland_manifest_url">https://github.com/LaurenceGuws/howl-pm/releases/download/android-dev-2026.04.18.182005/android-dev-prefix.release.manifest.json</string>
+    <string name="userland_manifest_url">https://github.com/LaurenceGuws/howl-pm/releases/download/android-dev-2026.05.01.014509/android-dev-prefix.release.manifest.json</string>
 </resources>

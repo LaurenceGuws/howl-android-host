@@ -12,9 +12,57 @@ ACTIVITY="howl.term/.Main"
 TIMEOUT_SECS="${TIMEOUT_SECS:-8}"
 ATTACH_LOGCAT="${ATTACH_LOGCAT:-0}"
 JNI_LIB_DIR="$ROOT/src/main/jniLibs/arm64-v8a"
+STRINGS_XML="$ROOT/src/main/res/values/strings.xml"
+PKG_DATA_DIR="/data/data/$PKG/files"
+PREFIX_DIR="$PKG_DATA_DIR/usr"
+PM_PATH="$PREFIX_DIR/bin/howl-pm"
 
 mkdir -p "$LOG_DIR"
 mkdir -p "$JNI_LIB_DIR"
+
+manifest_url_from_xml() {
+  sed -n 's:.*<string name="userland_manifest_url">\(.*\)</string>.*:\1:p' "$STRINGS_XML" | head -n 1
+}
+
+sync_howl_pm_binary() {
+  local manifest_url
+  manifest_url="$(manifest_url_from_xml)"
+  if [ -z "$manifest_url" ]; then
+    echo "howl_pm_sync=skip reason=manifest_url_missing"
+    return 0
+  fi
+  local release_prefix
+  release_prefix="$(sed -E 's#(https://github.com/[^/]+/[^/]+/releases/download/[^/]+)/.*#\1#' <<<"$manifest_url")"
+  if [ -z "$release_prefix" ] || [ "$release_prefix" = "$manifest_url" ]; then
+    echo "howl_pm_sync=skip reason=manifest_url_unexpected"
+    return 0
+  fi
+  local latest_url="$release_prefix/howl-pm-android-arm64"
+  local tmp_bin
+  tmp_bin="$(mktemp)"
+  if ! curl -fL --connect-timeout 10 --max-time 60 "$latest_url" -o "$tmp_bin" >/dev/null 2>&1; then
+    rm -f "$tmp_bin"
+    echo "howl_pm_sync=skip reason=download_failed url=$latest_url"
+    return 0
+  fi
+  local latest_sha
+  latest_sha="$(sha256sum "$tmp_bin" | awk '{print $1}')"
+  local installed_sha
+  installed_sha="$(
+    adb shell run-as "$PKG" sh -lc "if [ -f '$PM_PATH' ]; then sha256sum '$PM_PATH' | awk '{print \\\$1}'; fi" 2>/dev/null \
+      | tr -d '\r'
+  )"
+  if [ -n "$installed_sha" ] && [ "$installed_sha" = "$latest_sha" ]; then
+    rm -f "$tmp_bin"
+    echo "howl_pm_sync=up_to_date sha256=$latest_sha"
+    return 0
+  fi
+  adb push "$tmp_bin" /data/local/tmp/howl-pm-android-arm64 >/dev/null
+  adb shell run-as "$PKG" sh -lc "mkdir -p '$PREFIX_DIR/bin' && cp /data/local/tmp/howl-pm-android-arm64 '$PM_PATH' && chmod 755 '$PM_PATH'"
+  adb shell rm -f /data/local/tmp/howl-pm-android-arm64 >/dev/null 2>&1 || true
+  rm -f "$tmp_bin"
+  echo "howl_pm_sync=replaced old_sha=${installed_sha:-none} new_sha=$latest_sha"
+}
 
 pick_ndk_root() {
   if [ -n "${ANDROID_NDK_HOME:-}" ] && [ -d "$ANDROID_NDK_HOME" ]; then
@@ -65,6 +113,7 @@ cp "$HOWL_TERM_ROOT/zig-out/lib/libhowl_term.so" "$JNI_LIB_DIR/libhowl_term.so"
 ./gradlew :assembleDebug --no-daemon
 APK="$ROOT/build/outputs/apk/debug/howl-term-debug.apk"
 adb install -r "$APK"
+sync_howl_pm_binary
 adb logcat -c
 adb shell am start -n "$ACTIVITY"
 

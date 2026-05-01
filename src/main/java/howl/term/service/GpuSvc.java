@@ -120,12 +120,9 @@ public class GpuSvc {
                     @Override
                     public boolean sendKeyEvent(KeyEvent event) {
                         if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
-                        if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
-                            hooks.onInputBytes(new byte[] { '\r' });
-                            return true;
-                        }
-                        if (event.getKeyCode() == KeyEvent.KEYCODE_DEL) {
-                            hooks.onInputBytes(new byte[] { 0x7f });
+                        final byte[] mapped = mapKeyEvent(event);
+                        if (mapped != null && mapped.length > 0) {
+                            hooks.onInputBytes(mapped);
                             return true;
                         }
                         final int codepoint = event.getUnicodeChar();
@@ -175,6 +172,55 @@ public class GpuSvc {
         });
         view.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         return view;
+    }
+
+    private static byte[] mapKeyEvent(KeyEvent event) {
+        final int keyCode = event.getKeyCode();
+        final boolean ctrl = event.isCtrlPressed();
+        final boolean alt = event.isAltPressed();
+
+        if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) return new byte[] { '\r' };
+        if (keyCode == KeyEvent.KEYCODE_DEL) return new byte[] { 0x7f };
+        if (keyCode == KeyEvent.KEYCODE_TAB) return new byte[] { '\t' };
+        if (keyCode == KeyEvent.KEYCODE_ESCAPE) return new byte[] { 0x1b };
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return "\u001b[A".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return "\u001b[B".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return "\u001b[C".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return "\u001b[D".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_MOVE_HOME) return "\u001b[H".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_MOVE_END) return "\u001b[F".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_PAGE_UP) return "\u001b[5~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_PAGE_DOWN) return "\u001b[6~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_FORWARD_DEL) return "\u001b[3~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_INSERT) return "\u001b[2~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F1) return "\u001bOP".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F2) return "\u001bOQ".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F3) return "\u001bOR".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F4) return "\u001bOS".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F5) return "\u001b[15~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F6) return "\u001b[17~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F7) return "\u001b[18~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F8) return "\u001b[19~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F9) return "\u001b[20~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F10) return "\u001b[21~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F11) return "\u001b[23~".getBytes(StandardCharsets.UTF_8);
+        if (keyCode == KeyEvent.KEYCODE_F12) return "\u001b[24~".getBytes(StandardCharsets.UTF_8);
+
+        if (ctrl) {
+            final int cp = event.getUnicodeChar(KeyEvent.META_CTRL_ON);
+            if (cp > 0 && cp <= 0x1f) return new byte[] { (byte) cp };
+        }
+        if (alt) {
+            final int cp = event.getUnicodeChar();
+            if (cp > 0 && !Character.isISOControl(cp)) {
+                final byte[] b = new String(Character.toChars(cp)).getBytes(StandardCharsets.UTF_8);
+                final byte[] out = new byte[b.length + 1];
+                out[0] = 0x1b;
+                System.arraycopy(b, 0, out, 1, b.length);
+                return out;
+            }
+        }
+        return null;
     }
 
     public void requestRender(android.view.View view) {

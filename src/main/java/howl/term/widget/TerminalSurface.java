@@ -6,6 +6,7 @@ import howl.term.service.UserlandSvc;
 
 /** Starts GPU runtime */
 public final class TerminalSurface {
+    private static final String TAG = "howl.term.runtime";
     private final GpuSvc gpuSvc;
     private final TerminalSvc termSvc;
     private final UserlandSvc userlandSvc;
@@ -58,18 +59,21 @@ public final class TerminalSurface {
                 surfaceReady = false;
                 texture = gpuSvc.texture();
                 final boolean userlandReady = userlandSvc.waitUntilReady(4000);
+                String shell = userlandSvc.getShell();
+                String command = userlandSvc.buildShellCommand();
                 if (!userlandReady) {
-                    termStarted = false;
-                    return;
+                    android.util.Log.e(TAG, "userland not ready; using fallback shell");
+                    shell = "/system/bin/sh";
+                    command = null;
                 }
-                final String shell = userlandSvc.getShell();
-                final String command = userlandSvc.buildShellCommand();
                 if (!termSvc.configurePty(shell, command)) {
+                    android.util.Log.e(TAG, "terminal configure failed shell=" + shell);
                     termStarted = false;
                     return;
                 }
                 termStarted = termSvc.start();
                 if (!termStarted) {
+                    android.util.Log.e(TAG, "terminal start failed shell=" + shell);
                 } else {
                     startWakeThread();
                 }

@@ -1,49 +1,49 @@
 package howl.term;
 
-import howl.term.service.InputSvc;
-import howl.term.service.WindowSvc;
-import howl.term.service.UserlandSvc;
+import howl.term.service.Input;
+import howl.term.service.Window;
+import howl.term.service.Userland;
 import howl.term.widget.AssistBar;
 import howl.term.widget.SidePanel;
-import howl.term.widget.TerminalSurface;
+import howl.term.widget.TermInstance;
 
 /** App activity. */
 public final class Main extends android.app.Activity {
-    private final WindowSvc winSvc = new WindowSvc();
-    private final InputSvc inputSvc = new InputSvc();
-    private TerminalSurface termSfc;
+    private final Window win = new Window();
+    private final Input input = new Input();
+    private TermInstance termInst;
     private AssistBar assistBar;
     private SidePanel sidePanel;
-    private UserlandSvc userlandSvc;
+    private Userland userland;
 
     @Override
     protected void onCreate(android.os.Bundle bundle) {
         super.onCreate(bundle);
-        userlandSvc = new UserlandSvc(this);
-        userlandSvc.start();
+        userland = new Userland(this);
+        userland.start();
 
-        final android.widget.FrameLayout root = winSvc.root(this);
-        final android.widget.FrameLayout appWindow = winSvc.container(this);
-        final android.widget.FrameLayout overlayWindow = winSvc.container(this);
-        final android.widget.FrameLayout surfaceBox = winSvc.container(this);
-        final android.view.View leftEdge = winSvc.container(this);
-        final android.view.View bottomEdge = winSvc.container(this);
-        final android.view.View overlayScrim = winSvc.container(this);
+        final android.widget.FrameLayout root = win.root(this);
+        final android.widget.FrameLayout appWindow = win.container(this);
+        final android.widget.FrameLayout overlayWindow = win.container(this);
+        final android.widget.FrameLayout surfaceBox = win.container(this);
+        final android.view.View leftEdge = win.container(this);
+        final android.view.View bottomEdge = win.container(this);
+        final android.view.View overlayScrim = win.container(this);
         final int assistBarDp = 66;
         final int assistBarPx = Math.round(assistBarDp * getResources().getDisplayMetrics().density);
         final int bottomEdgePx = Math.round(54 * getResources().getDisplayMetrics().density);
 
-        termSfc = new TerminalSurface(userlandSvc);
-        assistBar = new AssistBar(this, winSvc);
-        sidePanel = new SidePanel(this, winSvc);
-        final android.widget.FrameLayout.LayoutParams surfaceParams = winSvc.fill();
+        termInst = new TermInstance(userland);
+        assistBar = new AssistBar(this, win);
+        sidePanel = new SidePanel(this, win);
+        final android.widget.FrameLayout.LayoutParams surfaceParams = win.fill();
         surfaceParams.bottomMargin = 0;
-        winSvc.mount(root, appWindow, winSvc.fill());
-        winSvc.mount(root, overlayWindow, winSvc.fill());
+        win.mount(root, appWindow, win.fill());
+        win.mount(root, overlayWindow, win.fill());
 
-        winSvc.mount(appWindow, surfaceBox, surfaceParams);
-        winSvc.mount(appWindow, assistBar.view(), winSvc.bottomBar(this, assistBarDp));
-        winSvc.mount(appWindow, leftEdge, new android.widget.FrameLayout.LayoutParams(
+        win.mount(appWindow, surfaceBox, surfaceParams);
+        win.mount(appWindow, assistBar.view(), win.bottomBar(this, assistBarDp));
+        win.mount(appWindow, leftEdge, new android.widget.FrameLayout.LayoutParams(
                 Math.round(24 * getResources().getDisplayMetrics().density),
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT
         ));
@@ -52,12 +52,12 @@ public final class Main extends android.app.Activity {
                 bottomEdgePx
         );
         bottomParams.gravity = android.view.Gravity.BOTTOM;
-        winSvc.mount(appWindow, bottomEdge, bottomParams);
-        winSvc.mount(surfaceBox, termSfc.view(this), winSvc.fill());
+        win.mount(appWindow, bottomEdge, bottomParams);
+        win.mount(surfaceBox, termInst.view(this), win.fill());
 
-        winSvc.setBackground(overlayScrim, 0x55000000);
-        winSvc.mount(overlayWindow, overlayScrim, winSvc.fill());
-        winSvc.mount(overlayWindow, sidePanel.view(), winSvc.leftPanel(this, 280));
+        win.setBackground(overlayScrim, 0x55000000);
+        win.mount(overlayWindow, overlayScrim, win.fill());
+        win.mount(overlayWindow, sidePanel.view(), win.leftPanel(this, 280));
 
         assistBar.view().setZ(20f);
         leftEdge.setZ(30f);
@@ -65,8 +65,8 @@ public final class Main extends android.app.Activity {
         overlayScrim.setZ(40f);
         sidePanel.view().setZ(50f);
 
-        inputSvc.bindSwipeUp(bottomEdge, assistBar::show);
-        inputSvc.bindSwipeDown(assistBar.view(), assistBar::hide);
+        input.bindSwipeUp(bottomEdge, assistBar::show);
+        input.bindSwipeDown(assistBar.view(), assistBar::hide);
         assistBar.setVisibilityListener(visible -> {
             bottomEdge.setVisibility(visible ? android.view.View.GONE : android.view.View.VISIBLE);
             final android.widget.FrameLayout.LayoutParams params =
@@ -79,14 +79,14 @@ public final class Main extends android.app.Activity {
         sidePanel.bindOpen(leftEdge);
         sidePanel.bindOverlayScrim(overlayScrim);
         sidePanel.bindClose();
-        winSvc.keepScreenOn(this);
-        winSvc.setContent(this, root);
+        win.keepScreenOn(this);
+        win.setContent(this, root);
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        if (userlandSvc == null) {
+        if (userland == null) {
             throw new IllegalStateException("userland runtime missing");
         }
     }
@@ -94,12 +94,12 @@ public final class Main extends android.app.Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (termSfc != null) termSfc.onResume();
+        if (termInst != null) termInst.onResume();
     }
 
     @Override
     protected void onPause() {
-        if (termSfc != null) termSfc.onPause();
+        if (termInst != null) termInst.onPause();
         super.onPause();
     }
 }

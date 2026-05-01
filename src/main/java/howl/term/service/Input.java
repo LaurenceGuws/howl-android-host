@@ -1,7 +1,7 @@
 package howl.term.service;
 
 /** Android input wrappers. */
-public final class InputSvc {
+public final class Input {
     private enum ShellGesture {
         NONE,
         LEFT_EDGE_OPEN,
@@ -12,7 +12,7 @@ public final class InputSvc {
     private float shellDownX = 0f;
     private float shellDownY = 0f;
 
-    public InputSvc() {}
+    public Input() {}
 
     public boolean handleAppShellTouch(
             android.view.View root,

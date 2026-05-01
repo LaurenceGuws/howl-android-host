@@ -1,15 +1,15 @@
 package howl.term.widget;
 
-import howl.term.service.GpuSvc;
-import howl.term.service.TerminalSvc;
-import howl.term.service.UserlandSvc;
+import howl.term.service.Gpu;
+import howl.term.service.Terminal;
+import howl.term.service.Userland;
 
 /** Starts GPU runtime */
-public final class TerminalSurface {
+public final class TermInstance {
     private static final String TAG = "howl.term.runtime";
-    private final GpuSvc gpuSvc;
-    private final TerminalSvc termSvc;
-    private final UserlandSvc userlandSvc;
+    private final Gpu gpu;
+    private final Terminal term;
+    private final Userland userland;
     private volatile int pendingRenderWidth;
     private volatile int pendingRenderHeight;
     private volatile int pendingGridWidth;
@@ -24,13 +24,13 @@ public final class TerminalSurface {
     private Thread wakeThread;
     private final java.util.concurrent.atomic.AtomicBoolean renderQueued;
 
-    public TerminalSurface(UserlandSvc userland) {
-        this.gpuSvc = new GpuSvc();
+    public TermInstance(Userland userland) {
+        this.gpu = new Gpu();
         if (userland == null) {
             throw new IllegalArgumentException("userland runtime required");
         }
-        this.userlandSvc = userland;
-        this.termSvc = new TerminalSvc();
+        this.userland = userland;
+        this.term = new Terminal();
         this.pendingRenderWidth = 0;
         this.pendingRenderHeight = 0;
         this.pendingGridWidth = 0;
@@ -50,28 +50,28 @@ public final class TerminalSurface {
         final android.util.DisplayMetrics dm = activity.getResources().getDisplayMetrics();
         final int cellWidthPx = Math.max(12, Math.round(8.0f * dm.density));
         final int cellHeightPx = Math.max(24, Math.round(16.0f * dm.density));
-        termSvc.configureCellSizePx(cellWidthPx, cellHeightPx);
+        term.configureCellSizePx(cellWidthPx, cellHeightPx);
         final android.view.View[] viewRef = new android.view.View[1];
-        final android.view.View view = gpuSvc.surface(activity, new GpuSvc.FrameHooks() {
+        final android.view.View view = gpu.surface(activity, new Gpu.FrameHooks() {
             @Override
             public void onSurfaceCreated() {
                 stopRequested = false;
                 surfaceReady = false;
-                texture = gpuSvc.texture();
-                final boolean userlandReady = userlandSvc.waitUntilReady(4000);
-                String shell = userlandSvc.getShell();
-                String command = userlandSvc.buildShellCommand();
+                texture = gpu.texture();
+                final boolean userlandReady = userland.waitUntilReady(4000);
+                String shell = userland.getShell();
+                String command = userland.buildShellCommand();
                 if (!userlandReady) {
                     android.util.Log.e(TAG, "userland not ready; using fallback shell");
                     shell = "/system/bin/sh";
                     command = null;
                 }
-                if (!termSvc.configurePty(shell, command)) {
+                if (!term.configurePty(shell, command)) {
                     android.util.Log.e(TAG, "terminal configure failed shell=" + shell);
                     termStarted = false;
                     return;
                 }
-                termStarted = termSvc.start();
+                termStarted = term.start();
                 if (!termStarted) {
                     android.util.Log.e(TAG, "terminal start failed shell=" + shell);
                 } else {
@@ -83,7 +83,7 @@ public final class TerminalSurface {
 
             @Override
             public void onSurfaceChanged(int width, int height) {
-                gpuSvc.ensureTextureSize(width, height);
+                gpu.ensureTextureSize(width, height);
                 scheduleRenderResize(width, height);
                 surfaceReady = true;
                 requestRenderCoalesced(viewRef[0]);
@@ -93,7 +93,7 @@ public final class TerminalSurface {
             public void onDrawFrame() {
                 renderQueued.set(false);
                 if (stopRequested && termStarted) {
-                    stopSvc();
+                    stop();
                     return;
                 }
                 if (!termStarted) {
@@ -109,7 +109,7 @@ public final class TerminalSurface {
                 final boolean hadResize = pendingResize;
                 if (hadResize) pendingResize = false;
 
-                final int rc = termSvc.renderFrameSized(
+                final int rc = term.renderFrameSized(
                         renderWidth,
                         renderHeight,
                         gridWidth,
@@ -119,7 +119,7 @@ public final class TerminalSurface {
                 if (rc < 0) {
                     return;
                 }
-                final int ackRc = termSvc.presentAck();
+                final int ackRc = term.presentAck();
                 if (ackRc < 0) {
                     return;
                 }
@@ -128,13 +128,13 @@ public final class TerminalSurface {
             @Override
             public void onSurfaceDestroyed() {
                 stopRequested = true;
-                stopSvc();
+                stop();
             }
 
             @Override
             public void onInputBytes(byte[] bytes) {
                 if (bytes == null || bytes.length == 0 || !termStarted) return;
-                final int rc = termSvc.publishInputBytes(bytes);
+                final int rc = term.publishInputBytes(bytes);
                 if (rc < 0) {
                     return;
                 }
@@ -156,7 +156,7 @@ public final class TerminalSurface {
                 }
             }
             if (bytes == null || bytes.length == 0) return false;
-            final int rc = termSvc.publishInputBytes(bytes);
+            final int rc = term.publishInputBytes(bytes);
             if (rc < 0) {
                 return false;
             }
@@ -169,7 +169,7 @@ public final class TerminalSurface {
             if (width != oldRight - oldLeft || height != oldBottom - oldTop) {
                 scheduleRenderResize(width, height);
                 scheduleGridResize(width, height);
-                gpuSvc.resizeTexture(v, width, height);
+                gpu.resizeTexture(v, width, height);
                 requestRenderCoalesced(v);
             }
         });
@@ -257,7 +257,7 @@ public final class TerminalSurface {
         pendingResize = true;
     }
 
-    private synchronized void stopSvc() {
+    private synchronized void stop() {
         if (!termStarted) {
             return;
         }
@@ -270,7 +270,7 @@ public final class TerminalSurface {
             } catch (InterruptedException ignored) {}
         }
         wakeThread = null;
-        termSvc.stop();
+        term.stop();
         termStarted = false;
         stopRequested = false;
         surfaceReady = false;
@@ -282,7 +282,7 @@ public final class TerminalSurface {
         wakeThreadRunning = true;
         wakeThread = new Thread(() -> {
             while (wakeThreadRunning && termStarted && !stopRequested) {
-                final int rc = termSvc.waitRenderWake(16);
+                final int rc = term.waitRenderWake(16);
                 if (!wakeThreadRunning || !termStarted || stopRequested) break;
                 if (rc < 0) break;
                 if (rc > 0) {
@@ -296,6 +296,6 @@ public final class TerminalSurface {
     private void requestRenderCoalesced(android.view.View v) {
         if (v == null) return;
         if (!renderQueued.compareAndSet(false, true)) return;
-        v.post(() -> gpuSvc.requestRender(v));
+        v.post(() -> gpu.requestRender(v));
     }
 }

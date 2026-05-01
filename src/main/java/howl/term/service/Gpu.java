@@ -12,7 +12,7 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.charset.StandardCharsets;
 /** Presents a single gpu texture */
-public class GpuSvc {
+public class Gpu {
     public interface FrameHooks {
         void onSurfaceCreated();
         void onSurfaceChanged(int width, int height);
@@ -30,7 +30,7 @@ public class GpuSvc {
     private int textureWidth;
     private int textureHeight;
 
-    public GpuSvc() {
+    public Gpu() {
         this.texture = 0;
         this.program = 0;
         this.posHandle = -1;

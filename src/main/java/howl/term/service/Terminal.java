@@ -1,7 +1,7 @@
 package howl.term.service;
 
 /** Java wrapper for howl-term JNI runtime entrypoints. */
-public final class TerminalSvc {
+public final class Terminal {
     private static final String TAG = "howl.term.runtime";
     private static final boolean Ready;
     private static final int DEFAULT_COLS = 60;
@@ -33,7 +33,7 @@ public final class TerminalSvc {
         Ready = loaded;
     }
 
-    public TerminalSvc() {
+    public Terminal() {
         this.started = false;
         this.state = LifecycleState.STOPPED;
         this.handle = 0L;

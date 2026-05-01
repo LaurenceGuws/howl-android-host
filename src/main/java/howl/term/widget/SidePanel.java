@@ -1,22 +1,22 @@
 package howl.term.widget;
 
-import howl.term.service.InputSvc;
-import howl.term.service.WindowSvc;
+import howl.term.service.Input;
+import howl.term.service.Window;
 
 /** Left slide-out widget. */
 public final class SidePanel {
     private final android.widget.FrameLayout view;
-    private final WindowSvc winSvc;
-    private final InputSvc inputSvc;
+    private final Window win;
+    private final Input input;
     private android.view.View overlayScrim;
 
-    public SidePanel(android.app.Activity activity, WindowSvc winSvc) {
-        this.winSvc = winSvc;
-        this.inputSvc = new InputSvc();
-        this.view = winSvc.container(activity);
+    public SidePanel(android.app.Activity activity, Window win) {
+        this.win = win;
+        this.input = new Input();
+        this.view = win.container(activity);
         this.overlayScrim = null;
-        winSvc.setBackground(view, 0xFF202020);
-        winSvc.setGone(view);
+        win.setBackground(view, 0xFF202020);
+        win.setGone(view);
     }
 
     public void bindOverlayScrim(android.view.View scrim) {
@@ -44,26 +44,26 @@ public final class SidePanel {
             }
             return event.getAction() == android.view.MotionEvent.ACTION_CANCEL;
         });
-        winSvc.setGone(scrim);
+        win.setGone(scrim);
     }
 
     public void bindOpen(android.view.View edge) {
-        inputSvc.bindSwipeRight(edge, this::open);
+        input.bindSwipeRight(edge, this::open);
     }
 
     public void bindClose() {
-        inputSvc.bindSwipeLeft(view, this::close);
+        input.bindSwipeLeft(view, this::close);
     }
 
     public void open() {
-        if (overlayScrim != null) winSvc.setVisible(overlayScrim);
-        winSvc.setVisible(view);
-        winSvc.setX(view, 0f);
+        if (overlayScrim != null) win.setVisible(overlayScrim);
+        win.setVisible(view);
+        win.setX(view, 0f);
     }
 
     public void close() {
-        winSvc.setGone(view);
-        if (overlayScrim != null) winSvc.setGone(overlayScrim);
+        win.setGone(view);
+        if (overlayScrim != null) win.setGone(overlayScrim);
     }
 
     public boolean isVisible() {

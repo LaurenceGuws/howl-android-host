@@ -1,6 +1,6 @@
 package howl.term.widget;
 
-import howl.term.service.WindowSvc;
+import howl.term.service.Window;
 
 /** Bottom assist bar widget. */
 public final class AssistBar {
@@ -8,19 +8,19 @@ public final class AssistBar {
         void onChanged(boolean visible);
     }
 
-    private final WindowSvc winSvc;
+    private final Window win;
     private final android.widget.FrameLayout view;
     private VisibilityListener visibilityListener;
 
-    public AssistBar(android.app.Activity activity, WindowSvc winSvc) {
-        this.winSvc = winSvc;
-        this.view = winSvc.container(activity);
+    public AssistBar(android.app.Activity activity, Window win) {
+        this.win = win;
+        this.view = win.container(activity);
         this.visibilityListener = null;
-        winSvc.setBackground(view, 0xFF1A1A1A);
+        win.setBackground(view, 0xFF1A1A1A);
         view.setClickable(true);
         view.setFocusable(true);
         view.setFocusableInTouchMode(true);
-        winSvc.bindTap(view, () -> winSvc.toggleIme(activity, view));
+        win.bindTap(view, () -> win.toggleIme(activity, view));
         hide();
     }
 
@@ -29,12 +29,12 @@ public final class AssistBar {
     }
 
     public void show() {
-        winSvc.setVisible(view);
+        win.setVisible(view);
         if (visibilityListener != null) visibilityListener.onChanged(true);
     }
 
     public void hide() {
-        winSvc.setGone(view);
+        win.setGone(view);
         if (visibilityListener != null) visibilityListener.onChanged(false);
     }
 

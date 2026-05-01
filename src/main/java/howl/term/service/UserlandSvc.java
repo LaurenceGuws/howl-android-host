@@ -187,9 +187,6 @@ public final class UserlandSvc {
 
     private void ensureBashRc() {
         final File bashrc = new File(home + "/.bashrc");
-        if (bashrc.isFile()) {
-            return;
-        }
         final String content =
                 "# ~/.bashrc: executed by bash(1) for non-login shells.\n"
                         + "# Howl Android userland profile (Debian-style prompt + sane defaults).\n"

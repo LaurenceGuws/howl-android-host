@@ -19,6 +19,8 @@ public final class TerminalSvc {
     private long handle;
     private String shellPath;
     private String command;
+    private int cellWidthPx;
+    private int cellHeightPx;
 
     static {
         boolean loaded = false;
@@ -26,7 +28,7 @@ public final class TerminalSvc {
             System.loadLibrary("howl_term");
             loaded = true;
         } catch (UnsatisfiedLinkError err) {
-            android.util.Log.e(TAG, " library load failed err=" + err.getMessage());
+            android.util.Log.e(TAG, "native load failed", err);
         }
         Ready = loaded;
     }
@@ -37,25 +39,33 @@ public final class TerminalSvc {
         this.handle = 0L;
         this.shellPath = null;
         this.command = null;
+        this.cellWidthPx = DEFAULT_CELL_WIDTH;
+        this.cellHeightPx = DEFAULT_CELL_HEIGHT;
+    }
+
+    public void configureCellSizePx(int widthPx, int heightPx) {
+        if (widthPx < 1 || heightPx < 1) return;
+        this.cellWidthPx = widthPx;
+        this.cellHeightPx = heightPx;
     }
 
     public boolean start() {
         state = LifecycleState.STARTING;
         if (!Ready) {
-            android.util.Log.e(TAG, "start blocked  not ready");
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "terminal start failed: runtime not ready");
             return false;
         }
         if (shellPath == null || shellPath.isEmpty()) {
-            android.util.Log.e(TAG, "start blocked shell not configured");
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "terminal start failed: shell not configured");
             return false;
         }
-        handle = Create(shellPath, command, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_CELL_WIDTH, DEFAULT_CELL_HEIGHT);
+        handle = Create(shellPath, command, DEFAULT_COLS, DEFAULT_ROWS, cellWidthPx, cellHeightPx);
         started = handle != 0L;
         if (!started) {
-            android.util.Log.e(TAG, "Create failed");
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "terminal start failed: create returned null handle");
             return false;
         }
         state = LifecycleState.READY;
@@ -65,11 +75,12 @@ public final class TerminalSvc {
     public boolean configurePty(String shellPath, String command) {
         if (!Ready) {
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "pty configure failed: runtime not ready");
             return false;
         }
         if (shellPath == null || shellPath.isEmpty()) {
-            android.util.Log.e(TAG, "configurePty invalid shell path");
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "pty configure failed: empty shell path");
             return false;
         }
         this.shellPath = shellPath;
@@ -91,11 +102,12 @@ public final class TerminalSvc {
     public int renderFrame(int width, int height, int texture) {
         if (!Ready || !started) {
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "renderFrame failed: service not started");
             return -1;
         }
         if (width <= 0 || height <= 0 || texture <= 0) {
-            android.util.Log.e(TAG, "renderFrame invalid args w=" + width + " h=" + height + " tex=" + texture);
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "renderFrame failed: invalid arguments");
             return -2;
         }
         final int rc = RenderFrame(handle, width, height, texture);
@@ -108,11 +120,12 @@ public final class TerminalSvc {
     public int renderFrameSized(int renderWidth, int renderHeight, int gridWidth, int gridHeight, int texture) {
         if (!Ready || !started) {
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "renderFrameSized failed: service not started");
             return -1;
         }
         if (renderWidth <= 0 || renderHeight <= 0 || gridWidth <= 0 || gridHeight <= 0 || texture <= 0) {
-            android.util.Log.e(TAG, "renderFrameSized invalid args rw=" + renderWidth + " rh=" + renderHeight + " gw=" + gridWidth + " gh=" + gridHeight + " tex=" + texture);
             state = LifecycleState.FAILED;
+            android.util.Log.e(TAG, "renderFrameSized failed: invalid arguments");
             return -2;
         }
         final int rc = RenderFrameSized(handle, renderWidth, renderHeight, gridWidth, gridHeight, texture);
@@ -122,25 +135,35 @@ public final class TerminalSvc {
         return rc;
     }
 
-    public int dirtyState() {
-        if (!Ready || !started) return -1;
-        return DirtyState(handle);
-    }
-
-    public int feedBytes(byte[] data) {
-        if (!Ready || !started) return -1;
+    public int publishInputBytes(byte[] data) {
+        if (!Ready || !started) {
+            android.util.Log.e(TAG, "publishInputBytes failed: service not started");
+            return -1;
+        }
         if (data == null || data.length == 0) return 0;
-        return FeedBytes(handle, data);
+        final int rc = PublishInputBytes(handle, data);
+        if (rc < 0) android.util.Log.e(TAG, "publishInputBytes failed: native rc=" + rc);
+        return rc;
     }
 
-    public int acknowledgePresented() {
-        if (!Ready || !started) return -1;
-        return AcknowledgePresented(handle);
+    public int presentAck() {
+        if (!Ready || !started) {
+            android.util.Log.e(TAG, "presentAck failed: service not started");
+            return -1;
+        }
+        final int rc = PresentAck(handle);
+        if (rc < 0) android.util.Log.e(TAG, "presentAck failed: native rc=" + rc);
+        return rc;
     }
 
-    public int waitForWake(int timeoutMs) {
-        if (!Ready || !started) return -1;
-        return WaitForWake(handle, timeoutMs);
+    public int waitRenderWake(int timeoutMs) {
+        if (!Ready || !started) {
+            android.util.Log.e(TAG, "waitRenderWake failed: service not started");
+            return -1;
+        }
+        final int rc = WaitRenderWake(handle, timeoutMs);
+        if (rc < 0) android.util.Log.e(TAG, "waitRenderWake failed: native rc=" + rc);
+        return rc;
     }
 
     public LifecycleState state() {
@@ -158,9 +181,8 @@ public final class TerminalSvc {
     private static native void Destroy(long handle);
     private static native int RenderFrame(long handle, int width, int height, int texture);
     private static native int RenderFrameSized(long handle, int renderWidth, int renderHeight, int gridWidth, int gridHeight, int texture);
-    private static native int FeedBytes(long handle, byte[] data);
-    private static native int DirtyState(long handle);
-    private static native int AcknowledgePresented(long handle);
-    private static native int WaitForWake(long handle, int timeoutMs);
+    private static native int PublishInputBytes(long handle, byte[] data);
+    private static native int PresentAck(long handle);
+    private static native int WaitRenderWake(long handle, int timeoutMs);
     private static native int HasOutputProof(long handle);
 }

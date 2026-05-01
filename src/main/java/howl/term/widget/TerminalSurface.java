@@ -6,7 +6,6 @@ import howl.term.service.UserlandSvc;
 
 /** Starts GPU runtime */
 public final class TerminalSurface {
-    private static final String TAG = "howl.term.runtime";
     private final GpuSvc gpuSvc;
     private final TerminalSvc termSvc;
     private volatile int pendingRenderWidth;
@@ -21,6 +20,7 @@ public final class TerminalSurface {
     private volatile boolean surfaceReady;
     private volatile boolean wakeThreadRunning;
     private Thread wakeThread;
+    private final java.util.concurrent.atomic.AtomicBoolean renderQueued;
 
     public TerminalSurface(UserlandSvc userland) {
         this.gpuSvc = new GpuSvc();
@@ -29,7 +29,6 @@ public final class TerminalSurface {
         }
         this.termSvc = new TerminalSvc();
         if (!this.termSvc.configurePty(userland.getShell(), null)) {
-            android.util.Log.e(TAG, "runtime pty configure failed");
         }
         this.pendingRenderWidth = 0;
         this.pendingRenderHeight = 0;
@@ -43,9 +42,14 @@ public final class TerminalSurface {
         this.surfaceReady = false;
         this.wakeThreadRunning = false;
         this.wakeThread = null;
+        this.renderQueued = new java.util.concurrent.atomic.AtomicBoolean(false);
     }
 
     public android.view.View view(android.app.Activity activity) {
+        final android.util.DisplayMetrics dm = activity.getResources().getDisplayMetrics();
+        final int cellWidthPx = Math.max(12, Math.round(8.0f * dm.density));
+        final int cellHeightPx = Math.max(24, Math.round(16.0f * dm.density));
+        termSvc.configureCellSizePx(cellWidthPx, cellHeightPx);
         final android.view.View[] viewRef = new android.view.View[1];
         final android.view.View view = gpuSvc.surface(activity, new GpuSvc.FrameHooks() {
             @Override
@@ -55,12 +59,11 @@ public final class TerminalSurface {
                 texture = gpuSvc.texture();
                 termStarted = termSvc.start();
                 if (!termStarted) {
-                    android.util.Log.e(TAG, "runtime start failed state=" + termSvc.state());
                 } else {
                     startWakeThread();
                 }
                 if (viewRef[0] != null) viewRef[0].requestFocus();
-                if (viewRef[0] != null) gpuSvc.requestRender(viewRef[0]);
+                requestRenderCoalesced(viewRef[0]);
             }
 
             @Override
@@ -68,11 +71,12 @@ public final class TerminalSurface {
                 gpuSvc.ensureTextureSize(width, height);
                 scheduleRenderResize(width, height);
                 surfaceReady = true;
-                if (viewRef[0] != null) gpuSvc.requestRender(viewRef[0]);
+                requestRenderCoalesced(viewRef[0]);
             }
 
             @Override
             public void onDrawFrame() {
+                renderQueued.set(false);
                 if (stopRequested && termStarted) {
                     stopSvc();
                     return;
@@ -90,11 +94,6 @@ public final class TerminalSurface {
                 final boolean hadResize = pendingResize;
                 if (hadResize) pendingResize = false;
 
-                final int dirty = termSvc.dirtyState();
-                if (dirty == 0 && !hadResize) {
-                    return;
-                }
-
                 final int rc = termSvc.renderFrameSized(
                         renderWidth,
                         renderHeight,
@@ -103,11 +102,10 @@ public final class TerminalSurface {
                         texture
                 );
                 if (rc < 0) {
-                    android.util.Log.e(TAG, "runtime.render rc=" + rc + " state=" + termSvc.state());
                     return;
                 }
-                if (termSvc.acknowledgePresented() < 0) {
-                    android.util.Log.e(TAG, "runtime.acknowledgePresented failed");
+                final int ackRc = termSvc.presentAck();
+                if (ackRc < 0) {
                     return;
                 }
             }
@@ -116,6 +114,16 @@ public final class TerminalSurface {
             public void onSurfaceDestroyed() {
                 stopRequested = true;
                 stopSvc();
+            }
+
+            @Override
+            public void onInputBytes(byte[] bytes) {
+                if (bytes == null || bytes.length == 0 || !termStarted) return;
+                final int rc = termSvc.publishInputBytes(bytes);
+                if (rc < 0) {
+                    return;
+                }
+                requestRenderCoalesced(viewRef[0]);
             }
         });
         view.setFocusable(true);
@@ -135,20 +143,21 @@ public final class TerminalSurface {
                 }
             }
             if (bytes == null || bytes.length == 0) return false;
-            final int rc = termSvc.feedBytes(bytes);
+            final int rc = termSvc.publishInputBytes(bytes);
             if (rc < 0) {
-                android.util.Log.e(TAG, "runtime.feedBytes rc=" + rc);
                 return false;
             }
-            gpuSvc.requestRender(v);
+            requestRenderCoalesced(v);
             return true;
         });
         view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             final int width = right - left;
             final int height = bottom - top;
             if (width != oldRight - oldLeft || height != oldBottom - oldTop) {
+                scheduleRenderResize(width, height);
                 scheduleGridResize(width, height);
-                gpuSvc.requestRender(v);
+                gpuSvc.resizeTexture(v, width, height);
+                requestRenderCoalesced(v);
             }
         });
         viewRef[0] = view;
@@ -168,7 +177,7 @@ public final class TerminalSurface {
         final android.view.View v = surfaceView;
         if (v instanceof android.opengl.GLSurfaceView glView) {
             glView.onResume();
-            gpuSvc.requestRender(glView);
+            requestRenderCoalesced(glView);
         }
     }
 
@@ -213,15 +222,20 @@ public final class TerminalSurface {
         wakeThreadRunning = true;
         wakeThread = new Thread(() -> {
             while (wakeThreadRunning && termStarted && !stopRequested) {
-                final int rc = termSvc.waitForWake(100);
+                final int rc = termSvc.waitRenderWake(16);
                 if (!wakeThreadRunning || !termStarted || stopRequested) break;
                 if (rc < 0) break;
                 if (rc > 0) {
-                    final android.view.View v = surfaceView;
-                    if (v != null) v.post(() -> gpuSvc.requestRender(v));
+                    requestRenderCoalesced(surfaceView);
                 }
             }
         }, "howl-term-wake");
         wakeThread.start();
+    }
+
+    private void requestRenderCoalesced(android.view.View v) {
+        if (v == null) return;
+        if (!renderQueued.compareAndSet(false, true)) return;
+        v.post(() -> gpuSvc.requestRender(v));
     }
 }

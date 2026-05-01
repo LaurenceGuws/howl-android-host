@@ -73,7 +73,6 @@ public final class WindowSvc {
         final android.view.inputmethod.InputMethodManager imm =
                 (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
         if (imm == null) {
-            android.util.Log.e("howl.term.runtime", "toggleIme failed imm missing");
             return;
         }
         final android.view.View decor = activity.getWindow().getDecorView();
@@ -81,7 +80,6 @@ public final class WindowSvc {
             final android.view.WindowInsets insets = decor.getRootWindowInsets();
             final android.view.WindowInsetsController controller = decor.getWindowInsetsController();
             if (controller == null) {
-                android.util.Log.e("howl.term.runtime", "toggleIme failed insets controller missing");
                 return;
             }
             final boolean visible = insets != null && insets.isVisible(android.view.WindowInsets.Type.ime());
@@ -96,14 +94,10 @@ public final class WindowSvc {
 
         anchor.requestFocus();
         if (imm.isActive(anchor)) {
-            final boolean ok = imm.hideSoftInputFromWindow(decor.getWindowToken(), 0);
-            if (!ok) android.util.Log.e("howl.term.runtime", "toggleIme hide failed");
+            imm.hideSoftInputFromWindow(decor.getWindowToken(), 0);
             return;
         }
-        final boolean ok = imm.showSoftInput(anchor, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-        if (!ok) {
-            android.util.Log.e("howl.term.runtime", "toggleIme show failed");
-        }
+        imm.showSoftInput(anchor, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
     }
 
     private int dp(android.app.Activity activity, int value) {

@@ -2,9 +2,15 @@ package howl.term.service;
 
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
+import android.text.InputType;
+import android.view.KeyEvent;
+import android.view.inputmethod.BaseInputConnection;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.nio.charset.StandardCharsets;
 /** Presents a single gpu texture */
 public class GpuSvc {
     public interface FrameHooks {
@@ -12,6 +18,7 @@ public class GpuSvc {
         void onSurfaceChanged(int width, int height);
         void onDrawFrame();
         void onSurfaceDestroyed();
+        void onInputBytes(byte[] bytes);
     }
 
     private int texture;
@@ -35,7 +42,103 @@ public class GpuSvc {
     }
 
     public android.view.View surface(android.app.Activity activity, FrameHooks hooks) {
-        final GLSurfaceView view = new GLSurfaceView(activity);
+        final GLSurfaceView view = new GLSurfaceView(activity) {
+            @Override
+            public boolean onCheckIsTextEditor() {
+                return true;
+            }
+
+            @Override
+            public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
+                outAttrs.inputType = InputType.TYPE_CLASS_TEXT
+                        | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                        | InputType.TYPE_TEXT_FLAG_MULTI_LINE;
+                outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                        | EditorInfo.IME_FLAG_NO_FULLSCREEN
+                        | EditorInfo.IME_ACTION_NONE;
+                return new BaseInputConnection(this, false) {
+                    private long lastPublishNs = 0L;
+                    private String lastPublishText = "";
+                    private String composingText = "";
+
+                    private void publishText(CharSequence text, String source) {
+                        if (text == null || text.length() == 0) return;
+                        final String s = text.toString();
+                        final long now = System.nanoTime();
+                        // Prevent duplicate publish for keyboards that emit both commit and key paths.
+                        if (s.equals(lastPublishText) && (now - lastPublishNs) < 30_000_000L) {
+                            return;
+                        }
+                        lastPublishText = s;
+                        lastPublishNs = now;
+                        hooks.onInputBytes(s.getBytes(StandardCharsets.UTF_8));
+                    }
+
+                    @Override
+                    public boolean commitText(CharSequence text, int newCursorPosition) {
+                        publishText(text, "imeCommit");
+                        composingText = "";
+                        return true;
+                    }
+
+                    @Override
+                    public boolean setComposingText(CharSequence text, int newCursorPosition) {
+                        final String next = text == null ? "" : text.toString();
+                        final int len = next.length();
+                        if (len > 0) {
+                        }
+                        if (!next.isEmpty()) {
+                            if (next.startsWith(composingText)) {
+                                final String delta = next.substring(composingText.length());
+                                if (!delta.isEmpty()) {
+                                    publishText(delta, "imeComposeDelta");
+                                }
+                            } else if (!composingText.startsWith(next)) {
+                                // Compose reset/replacement: send fresh compose text once.
+                                publishText(next, "imeComposeReset");
+                            }
+                        }
+                        composingText = next;
+                        return true;
+                    }
+
+                    @Override
+                    public boolean deleteSurroundingText(int beforeLength, int afterLength) {
+                        if (beforeLength > 0) {
+                            for (int i = 0; i < beforeLength; i++) {
+                                hooks.onInputBytes(new byte[] { 0x7f });
+                            }
+                            if (!composingText.isEmpty()) {
+                                final int keep = Math.max(0, composingText.length() - beforeLength);
+                                composingText = composingText.substring(0, keep);
+                            }
+                            return true;
+                        }
+                        return super.deleteSurroundingText(beforeLength, afterLength);
+                    }
+
+                    @Override
+                    public boolean sendKeyEvent(KeyEvent event) {
+                        if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
+                        if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+                            hooks.onInputBytes(new byte[] { '\r' });
+                            return true;
+                        }
+                        if (event.getKeyCode() == KeyEvent.KEYCODE_DEL) {
+                            hooks.onInputBytes(new byte[] { 0x7f });
+                            return true;
+                        }
+                        final int codepoint = event.getUnicodeChar();
+                        if (codepoint > 0 && !Character.isISOControl(codepoint)) {
+                            final String s = new String(Character.toChars(codepoint));
+                            publishText(s, "imeKey");
+                            return true;
+                        }
+                        return super.sendKeyEvent(event);
+                    }
+                };
+            }
+        };
         view.setEGLContextClientVersion(2);
         view.setPreserveEGLContextOnPause(true);
         view.setRenderer(new GLSurfaceView.Renderer() {
@@ -78,6 +181,13 @@ public class GpuSvc {
         if (view instanceof GLSurfaceView glView) {
             glView.requestRender();
         }
+    }
+
+    public void resizeTexture(android.view.View view, int width, int height) {
+        if (!(view instanceof GLSurfaceView glView)) return;
+        final int w = Math.max(1, width);
+        final int h = Math.max(1, height);
+        glView.queueEvent(() -> ensureTextureSize(w, h));
     }
 
     private void initTexture() {
@@ -196,10 +306,10 @@ public class GpuSvc {
         uvHandle = GLES20.glGetAttribLocation(program, "aUv");
         samplerHandle = GLES20.glGetUniformLocation(program, "uTex");
         final float[] verts = new float[] {
-                -1f, -1f, 0f, 1f,
-                1f, -1f, 1f, 1f,
-                -1f, 1f, 0f, 0f,
-                1f, 1f, 1f, 0f
+                -1f, -1f, 0f, 0f,
+                1f, -1f, 1f, 0f,
+                -1f, 1f, 0f, 1f,
+                1f, 1f, 1f, 1f
         };
         quadBuffer = ByteBuffer.allocateDirect(verts.length * 4)
                 .order(ByteOrder.nativeOrder())

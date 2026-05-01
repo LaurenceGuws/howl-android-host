@@ -10,6 +10,7 @@ SUMMARY_FILE="$LOG_DIR/deploy_iteration.summary"
 PKG="howl.term"
 ACTIVITY="howl.term/.Main"
 TIMEOUT_SECS="${TIMEOUT_SECS:-8}"
+ATTACH_LOGCAT="${ATTACH_LOGCAT:-0}"
 JNI_LIB_DIR="$ROOT/src/main/jniLibs/arm64-v8a"
 
 mkdir -p "$LOG_DIR"
@@ -101,3 +102,9 @@ fi
 
 echo "launch_ok=$launch_ok pid=${PID:-none} displayed=$displayed_seen resume=$resume_seen crash=$crash_seen"
 echo "log=$LOG_FILE"
+echo "hint: adb logcat -v time -s howl.term.runtime:I howl.term.native:I AndroidRuntime:E '*:S'"
+
+if [ "$ATTACH_LOGCAT" = "1" ]; then
+  echo "attach_logcat=1"
+  exec adb logcat -v time -s howl.term.runtime:I howl.term.native:I AndroidRuntime:E '*:S'
+fi

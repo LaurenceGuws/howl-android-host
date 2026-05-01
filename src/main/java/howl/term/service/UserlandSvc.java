@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 
 /** Android host userland runtime skeleton. */
 public final class UserlandSvc {
-    private static final String TAG = "howl.userland";
     private final String prefix;
     private final String home;
     private final String tmp;
@@ -40,7 +39,6 @@ public final class UserlandSvc {
 
     public void start() {
         if (started) {
-            android.util.Log.e(TAG, "start called while already started");
             return;
         }
         started = true;
@@ -49,11 +47,9 @@ public final class UserlandSvc {
 
     private void initUserland() {
         if (!ensureDir(home)) {
-            android.util.Log.e(TAG, "failed to ensure home dir path=" + home);
             return;
         }
         if (!ensureDir(tmp)) {
-            android.util.Log.e(TAG, "failed to ensure tmp dir path=" + tmp);
             return;
         }
 
@@ -65,14 +61,12 @@ public final class UserlandSvc {
             return;
         }
         if (!pmExists) {
-            android.util.Log.e(TAG, "howl-pm binary missing path=" + howlPm);
             return;
         }
 
         runHowlPmInstall();
         final boolean shellAfter = new File(getShell()).isFile();
         if (!shellAfter) {
-            android.util.Log.e(TAG, "shell still missing after install path=" + getShell());
             return;
         }
         runHowlPmDoctorAndList();
@@ -96,18 +90,15 @@ public final class UserlandSvc {
                 getPrefix(),
                 "dev-baseline");
         if (rc != 0) {
-            android.util.Log.e(TAG, "howl-pm install failed rc=" + rc);
         }
     }
 
     private void runHowlPmDoctorAndList() {
         final int doctorRc = runHowlPm("doctor", "--prefix", getPrefix());
         if (doctorRc != 0) {
-            android.util.Log.e(TAG, "howl-pm doctor failed rc=" + doctorRc);
         }
         final int listRc = runHowlPm("list-available", "--manifest", manifestUrl, "--prefix", getPrefix());
         if (listRc != 0) {
-            android.util.Log.e(TAG, "howl-pm list-available failed rc=" + listRc);
         }
     }
 
@@ -131,10 +122,8 @@ public final class UserlandSvc {
             }
             return process.waitFor();
         } catch (IOException err) {
-            android.util.Log.e(TAG, "process spawn/io failure cmd=" + cmd[0] + " err=" + err.getMessage());
         } catch (InterruptedException err) {
             Thread.currentThread().interrupt();
-            android.util.Log.e(TAG, "process wait interrupted err=" + err.getMessage());
         }
         return -1;
     }

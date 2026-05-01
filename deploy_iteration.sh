@@ -42,12 +42,23 @@ sync_howl_pm_binary() {
       go run ./cmd/howl-pm version
     ) 2>/dev/null | tr -d '\r'
   )"
+  local_ver="$(printf '%s\n' "$local_ver" | head -n1 | tr -d '[:space:]')"
+  if ! [[ "$local_ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    echo "howl_pm_sync=skip reason=local_version_invalid value=$local_ver"
+    return 0
+  fi
   if [ -z "$local_ver" ]; then
     echo "howl_pm_sync=skip reason=local_version_unavailable"
     return 0
   fi
   local installed_ver
-  installed_ver="$(adb shell run-as "$PKG" sh -lc "\"$PM_PATH\" version 2>/dev/null || true" | tr -d '\r')"
+  installed_ver="$(
+    adb shell run-as "$PKG" "$PM_PATH" version 2>/dev/null \
+      | tr -d '\r' | head -n1 | tr -d '[:space:]'
+  )"
+  if [ -n "$installed_ver" ] && ! [[ "$installed_ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    installed_ver=""
+  fi
 
   if [ -z "$installed_ver" ]; then
     adb push "$HOWL_PM_LOCAL_BIN" /data/local/tmp/howl-pm-android-arm64 >/dev/null

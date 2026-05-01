@@ -7,61 +7,78 @@ HOWL_TERM_ROOT="$REPO_ROOT/howl-term"
 LOG_DIR="$ROOT/build/reports/android"
 LOG_FILE="$LOG_DIR/deploy_iteration.log"
 SUMMARY_FILE="$LOG_DIR/deploy_iteration.summary"
-PKG="howl.term"
-ACTIVITY="howl.term/.Main"
+PKG_DEFAULT="howl.term"
+PKG="$PKG_DEFAULT"
+ACTIVITY_DEFAULT="howl.term/.Main"
+ACTIVITY="$ACTIVITY_DEFAULT"
 TIMEOUT_SECS="${TIMEOUT_SECS:-8}"
 ATTACH_LOGCAT="${ATTACH_LOGCAT:-0}"
 JNI_LIB_DIR="$ROOT/src/main/jniLibs/arm64-v8a"
-STRINGS_XML="$ROOT/src/main/res/values/strings.xml"
 PKG_DATA_DIR="/data/data/$PKG/files"
 PREFIX_DIR="$PKG_DATA_DIR/usr"
 PM_PATH="$PREFIX_DIR/bin/howl-pm"
+HOWL_PM_ROOT="$REPO_ROOT/utils/howl-pm"
+HOWL_PM_LOCAL_BIN="${HOWL_PM_LOCAL_BIN:-$HOWL_PM_ROOT/dist/howl-pm-android-arm64}"
 
 mkdir -p "$LOG_DIR"
 mkdir -p "$JNI_LIB_DIR"
 
-manifest_url_from_xml() {
-  sed -n 's:.*<string name="userland_manifest_url">\(.*\)</string>.*:\1:p' "$STRINGS_XML" | head -n 1
+sync_howl_pm_binary() {
+  if [ ! -x "$HOWL_PM_LOCAL_BIN" ]; then
+    mkdir -p "$(dirname "$HOWL_PM_LOCAL_BIN")"
+    (
+      cd "$HOWL_PM_ROOT"
+      GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -o "$HOWL_PM_LOCAL_BIN" ./cmd/howl-pm
+    )
+  fi
+  if [ ! -x "$HOWL_PM_LOCAL_BIN" ]; then
+    echo "howl_pm_sync=skip reason=local_bin_missing path=$HOWL_PM_LOCAL_BIN"
+    return 0
+  fi
+  local local_ver
+  local_ver="$("$HOWL_PM_LOCAL_BIN" version | tr -d '\r')"
+  local installed_ver
+  installed_ver="$(adb shell run-as "$PKG" sh -lc "if [ -x '$PM_PATH' ]; then '$PM_PATH' version; fi" | tr -d '\r')"
+
+  if [ -z "$installed_ver" ]; then
+    adb push "$HOWL_PM_LOCAL_BIN" /data/local/tmp/howl-pm-android-arm64 >/dev/null
+    adb shell run-as "$PKG" sh -lc "mkdir -p '$PREFIX_DIR/bin' && cp /data/local/tmp/howl-pm-android-arm64 '$PM_PATH' && chmod 755 '$PM_PATH'"
+    adb shell rm -f /data/local/tmp/howl-pm-android-arm64 >/dev/null 2>&1 || true
+    echo "howl_pm_sync=installed local_version=$local_ver installed_version=none"
+    return 0
+  fi
+
+  local newest
+  newest="$(printf '%s\n%s\n' "$installed_ver" "$local_ver" | sort -V | tail -n1)"
+  if [ "$newest" = "$local_ver" ] && [ "$local_ver" != "$installed_ver" ]; then
+    adb push "$HOWL_PM_LOCAL_BIN" /data/local/tmp/howl-pm-android-arm64 >/dev/null
+    adb shell run-as "$PKG" sh -lc "mkdir -p '$PREFIX_DIR/bin' && cp /data/local/tmp/howl-pm-android-arm64 '$PM_PATH' && chmod 755 '$PM_PATH'"
+    adb shell rm -f /data/local/tmp/howl-pm-android-arm64 >/dev/null 2>&1 || true
+    echo "howl_pm_sync=replaced local_version=$local_ver installed_version=$installed_ver"
+    return 0
+  fi
+  echo "howl_pm_sync=up_to_date local_version=$local_ver installed_version=$installed_ver"
 }
 
-sync_howl_pm_binary() {
-  local manifest_url
-  manifest_url="$(manifest_url_from_xml)"
-  if [ -z "$manifest_url" ]; then
-    echo "howl_pm_sync=skip reason=manifest_url_missing"
+resolve_runtime_ids() {
+  if ! command -v aapt >/dev/null 2>&1; then
+    echo "runtime_pkg=$PKG runtime_activity=$ACTIVITY (aapt_missing)"
     return 0
   fi
-  local release_prefix
-  release_prefix="$(sed -E 's#(https://github.com/[^/]+/[^/]+/releases/download/[^/]+)/.*#\1#' <<<"$manifest_url")"
-  if [ -z "$release_prefix" ] || [ "$release_prefix" = "$manifest_url" ]; then
-    echo "howl_pm_sync=skip reason=manifest_url_unexpected"
-    return 0
+  local app_id launcher
+  app_id="$(aapt dump badging "$APK" | sed -n \"s/^package: name='\\([^']*\\)'.*/\\1/p\" | head -n1)"
+  if [ -n "$app_id" ]; then
+    PKG="$app_id"
+    local launchable
+    launchable="$(aapt dump badging "$APK" | sed -n \"s/^launchable-activity: name='\\([^']*\\)'.*/\\1/p\" | head -n1)"
+    if [ -n "$launchable" ]; then
+      ACTIVITY="$PKG/$launchable"
+    fi
   fi
-  local latest_url="$release_prefix/howl-pm-android-arm64"
-  local tmp_bin
-  tmp_bin="$(mktemp)"
-  if ! curl -fL --connect-timeout 10 --max-time 60 "$latest_url" -o "$tmp_bin" >/dev/null 2>&1; then
-    rm -f "$tmp_bin"
-    echo "howl_pm_sync=skip reason=download_failed url=$latest_url"
-    return 0
-  fi
-  local latest_sha
-  latest_sha="$(sha256sum "$tmp_bin" | awk '{print $1}')"
-  local installed_sha
-  installed_sha="$(
-    adb shell run-as "$PKG" sh -lc "if [ -f '$PM_PATH' ]; then sha256sum '$PM_PATH' | awk '{print \\\$1}'; fi" 2>/dev/null \
-      | tr -d '\r'
-  )"
-  if [ -n "$installed_sha" ] && [ "$installed_sha" = "$latest_sha" ]; then
-    rm -f "$tmp_bin"
-    echo "howl_pm_sync=up_to_date sha256=$latest_sha"
-    return 0
-  fi
-  adb push "$tmp_bin" /data/local/tmp/howl-pm-android-arm64 >/dev/null
-  adb shell run-as "$PKG" sh -lc "mkdir -p '$PREFIX_DIR/bin' && cp /data/local/tmp/howl-pm-android-arm64 '$PM_PATH' && chmod 755 '$PM_PATH'"
-  adb shell rm -f /data/local/tmp/howl-pm-android-arm64 >/dev/null 2>&1 || true
-  rm -f "$tmp_bin"
-  echo "howl_pm_sync=replaced old_sha=${installed_sha:-none} new_sha=$latest_sha"
+  PKG_DATA_DIR="/data/data/$PKG/files"
+  PREFIX_DIR="$PKG_DATA_DIR/usr"
+  PM_PATH="$PREFIX_DIR/bin/howl-pm"
+  echo "runtime_pkg=$PKG runtime_activity=$ACTIVITY"
 }
 
 pick_ndk_root() {
@@ -112,6 +129,7 @@ cp "$HOWL_TERM_ROOT/zig-out/lib/libhowl_term.so" "$JNI_LIB_DIR/libhowl_term.so"
 
 ./gradlew :assembleDebug --no-daemon
 APK="$ROOT/build/outputs/apk/debug/howl-term-debug.apk"
+resolve_runtime_ids
 adb install -r "$APK"
 sync_howl_pm_binary
 adb logcat -c

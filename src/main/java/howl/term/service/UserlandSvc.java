@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Android host userland runtime skeleton. */
 public final class UserlandSvc {
+    private static final String TAG = "howl.term.runtime";
     private final String prefix;
     private final String home;
     private final String tmp;
@@ -100,22 +101,28 @@ public final class UserlandSvc {
         }
 
         final boolean shellExists = new File(getShell()).isFile();
+        final boolean shellIsBash = shellExists && isGnuBashBinary();
         final boolean pmExists = new File(howlPm).isFile();
 
-        if (shellExists) {
+        if (shellExists && shellIsBash) {
             ensureShellErgonomics();
             runHowlPmDoctorAndList();
             markReady();
             return;
         }
         if (!pmExists) {
+            android.util.Log.e(TAG, "userland init failed: howl-pm missing at " + howlPm);
             failReady();
             return;
         }
 
-        runHowlPmInstall();
-        final boolean shellAfter = new File(getShell()).isFile();
+        final int installRc = runHowlPmInstall();
+        if (installRc != 0) {
+            android.util.Log.e(TAG, "userland install failed: rc=" + installRc);
+        }
+        final boolean shellAfter = new File(getShell()).isFile() && isGnuBashBinary();
         if (!shellAfter) {
+            android.util.Log.e(TAG, "userland init failed: bash missing or invalid at " + getShell());
             failReady();
             return;
         }
@@ -149,7 +156,7 @@ public final class UserlandSvc {
         return ok || dir.isDirectory();
     }
 
-    private void runHowlPmInstall() {
+    private int runHowlPmInstall() {
         final int rc = runHowlPm(
                 "install",
                 "--manifest",
@@ -157,17 +164,26 @@ public final class UserlandSvc {
                 "--prefix",
                 getPrefix(),
                 "dev-baseline");
-        if (rc != 0) {
-        }
+        if (rc != 0) android.util.Log.e(TAG, "howl-pm install rc=" + rc);
+        return rc;
     }
 
     private void runHowlPmDoctorAndList() {
         final int doctorRc = runHowlPm("doctor", "--prefix", getPrefix());
         if (doctorRc != 0) {
+            android.util.Log.e(TAG, "howl-pm doctor rc=" + doctorRc);
         }
         final int listRc = runHowlPm("list-available", "--manifest", manifestUrl, "--prefix", getPrefix());
         if (listRc != 0) {
+            android.util.Log.e(TAG, "howl-pm list rc=" + listRc);
         }
+    }
+
+    private boolean isGnuBashBinary() {
+        final File bash = new File(getShell());
+        if (!bash.isFile()) return false;
+        final int rc = runCommand(getShell(), "--version");
+        return rc == 0;
     }
 
     private void ensureShellErgonomics() {
@@ -339,6 +355,31 @@ public final class UserlandSvc {
             Thread.currentThread().interrupt();
         }
         return -1;
+    }
+
+    private int runCommand(String... cmd) {
+        try {
+            final ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            pb.directory(new File(home));
+            pb.environment().put("HOME", home);
+            pb.environment().put("TMPDIR", tmp);
+            pb.environment().put("PREFIX", getPrefix());
+            pb.environment().put("PATH", getPrefix() + "/bin:/system/bin");
+            pb.environment().put("SHELL", getShell());
+            pb.environment().put("LD_LIBRARY_PATH", getPrefix() + "/lib");
+            final Process process = pb.start();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                while (reader.readLine() != null) {}
+            }
+            return process.waitFor();
+        } catch (IOException err) {
+            return -1;
+        } catch (InterruptedException err) {
+            Thread.currentThread().interrupt();
+            return -1;
+        }
     }
 
 }

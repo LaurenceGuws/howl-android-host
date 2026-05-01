@@ -127,6 +127,7 @@ public final class UserlandSvc {
         }
         final String content =
                 "# howl android shell ergonomics\n"
+                        + "export APP_DATA_DIR=\"" + appDataDir() + "\"\n"
                         + "export PREFIX=\"" + getPrefix() + "\"\n"
                         + "export HOME=\"" + home + "\"\n"
                         + "export TMPDIR=\"" + tmp + "\"\n"
@@ -151,6 +152,19 @@ public final class UserlandSvc {
             return "howl.term";
         }
         return rest.substring(0, slash);
+    }
+
+    private String appDataDir() {
+        final String marker = "/data/data/";
+        if (!prefix.startsWith(marker)) {
+            return "/data/data/" + extractPackageName();
+        }
+        final String rest = prefix.substring(marker.length());
+        final int slash = rest.indexOf('/');
+        if (slash < 0) {
+            return "/data/data/" + extractPackageName();
+        }
+        return marker + rest.substring(0, slash);
     }
 
     private void writeExecutableFile(File file, String content) {
@@ -180,6 +194,7 @@ public final class UserlandSvc {
         try {
             final ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectErrorStream(true);
+            pb.directory(new File(home));
             pb.environment().put("HOME", home);
             pb.environment().put("TMPDIR", tmp);
             pb.environment().put("PREFIX", getPrefix());

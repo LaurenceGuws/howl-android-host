@@ -157,14 +157,14 @@ public final class UserlandSvc {
     private String appDataDir() {
         final String marker = "/data/data/";
         if (!prefix.startsWith(marker)) {
-            return "/data/data/" + extractPackageName();
+            return "/data/data/" + extractPackageName() + "/files";
         }
         final String rest = prefix.substring(marker.length());
         final int slash = rest.indexOf('/');
         if (slash < 0) {
-            return "/data/data/" + extractPackageName();
+            return "/data/data/" + extractPackageName() + "/files";
         }
-        return marker + rest.substring(0, slash);
+        return marker + rest.substring(0, slash) + "/files";
     }
 
     private void writeExecutableFile(File file, String content) {

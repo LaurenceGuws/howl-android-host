@@ -8,6 +8,7 @@ import howl.term.service.UserlandSvc;
 public final class TerminalSurface {
     private final GpuSvc gpuSvc;
     private final TerminalSvc termSvc;
+    private final UserlandSvc userlandSvc;
     private volatile int pendingRenderWidth;
     private volatile int pendingRenderHeight;
     private volatile int pendingGridWidth;
@@ -27,9 +28,8 @@ public final class TerminalSurface {
         if (userland == null) {
             throw new IllegalArgumentException("userland runtime required");
         }
+        this.userlandSvc = userland;
         this.termSvc = new TerminalSvc();
-        if (!this.termSvc.configurePty(userland.getShell(), null)) {
-        }
         this.pendingRenderWidth = 0;
         this.pendingRenderHeight = 0;
         this.pendingGridWidth = 0;
@@ -57,6 +57,17 @@ public final class TerminalSurface {
                 stopRequested = false;
                 surfaceReady = false;
                 texture = gpuSvc.texture();
+                final boolean userlandReady = userlandSvc.waitUntilReady(4000);
+                if (!userlandReady) {
+                    termStarted = false;
+                    return;
+                }
+                final String shell = userlandSvc.getShell();
+                final String command = userlandSvc.buildShellCommand();
+                if (!termSvc.configurePty(shell, command)) {
+                    termStarted = false;
+                    return;
+                }
                 termStarted = termSvc.start();
                 if (!termStarted) {
                 } else {

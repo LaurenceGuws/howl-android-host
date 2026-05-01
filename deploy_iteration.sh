@@ -36,9 +36,18 @@ sync_howl_pm_binary() {
     return 0
   fi
   local local_ver
-  local_ver="$("$HOWL_PM_LOCAL_BIN" version | tr -d '\r')"
+  local_ver="$(
+    (
+      cd "$HOWL_PM_ROOT"
+      go run ./cmd/howl-pm version
+    ) 2>/dev/null | tr -d '\r'
+  )"
+  if [ -z "$local_ver" ]; then
+    echo "howl_pm_sync=skip reason=local_version_unavailable"
+    return 0
+  fi
   local installed_ver
-  installed_ver="$(adb shell run-as "$PKG" sh -lc "if [ -x '$PM_PATH' ]; then '$PM_PATH' version; fi" | tr -d '\r')"
+  installed_ver="$(adb shell run-as "$PKG" sh -lc "\"$PM_PATH\" version 2>/dev/null || true" | tr -d '\r')"
 
   if [ -z "$installed_ver" ]; then
     adb push "$HOWL_PM_LOCAL_BIN" /data/local/tmp/howl-pm-android-arm64 >/dev/null
@@ -66,11 +75,11 @@ resolve_runtime_ids() {
     return 0
   fi
   local app_id launcher
-  app_id="$(aapt dump badging "$APK" | sed -n \"s/^package: name='\\([^']*\\)'.*/\\1/p\" | head -n1)"
+  app_id="$(aapt dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n1)"
   if [ -n "$app_id" ]; then
     PKG="$app_id"
     local launchable
-    launchable="$(aapt dump badging "$APK" | sed -n \"s/^launchable-activity: name='\\([^']*\\)'.*/\\1/p\" | head -n1)"
+    launchable="$(aapt dump badging "$APK" | sed -n "s/^launchable-activity: name='\\([^']*\\)'.*/\\1/p" | head -n1)"
     if [ -n "$launchable" ]; then
       ACTIVITY="$PKG/$launchable"
     fi

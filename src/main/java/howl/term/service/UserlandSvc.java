@@ -18,6 +18,9 @@ public final class UserlandSvc {
     private final String shell;
     private final String manifestUrl;
     private boolean started;
+    private volatile boolean ready;
+    private volatile boolean failed;
+    private final Object stateLock;
 
     public UserlandSvc(android.content.Context context) {
         final String appRoot = context.getString(R.string.userland_app_root, context.getPackageName());
@@ -28,6 +31,9 @@ public final class UserlandSvc {
         this.shell = this.prefix + context.getString(R.string.userland_shell_suffix);
         this.manifestUrl = context.getString(R.string.userland_manifest_url);
         this.started = false;
+        this.ready = false;
+        this.failed = false;
+        this.stateLock = new Object();
     }
 
     public String getShell() {
@@ -36,6 +42,39 @@ public final class UserlandSvc {
 
     public String getPrefix() {
         return prefix;
+    }
+
+    public String getHome() {
+        return home;
+    }
+
+    public String buildShellCommand() {
+        return "export APP_DATA_DIR=\"" + appDataDir() + "\";"
+                + "export PREFIX=\"" + getPrefix() + "\";"
+                + "export HOME=\"" + home + "\";"
+                + "export TMPDIR=\"" + tmp + "\";"
+                + "export TERM=\"xterm-256color\";"
+                + "export PATH=\"$PREFIX/bin:/system/bin:$PATH\";"
+                + "export LD_LIBRARY_PATH=\"$PREFIX/lib\";"
+                + "cd \"$HOME\";"
+                + "exec \"" + shell + "\" -i";
+    }
+
+    public boolean waitUntilReady(long timeoutMs) {
+        final long deadline = android.os.SystemClock.uptimeMillis() + Math.max(1L, timeoutMs);
+        synchronized (stateLock) {
+            while (!ready && !failed) {
+                final long remaining = deadline - android.os.SystemClock.uptimeMillis();
+                if (remaining <= 0) break;
+                try {
+                    stateLock.wait(remaining);
+                } catch (InterruptedException err) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            return ready;
+        }
     }
 
     public void start() {
@@ -47,10 +86,16 @@ public final class UserlandSvc {
     }
 
     private void initUserland() {
+        synchronized (stateLock) {
+            ready = false;
+            failed = false;
+        }
         if (!ensureDir(home)) {
+            failReady();
             return;
         }
         if (!ensureDir(tmp)) {
+            failReady();
             return;
         }
 
@@ -60,19 +105,39 @@ public final class UserlandSvc {
         if (shellExists) {
             ensureShellErgonomics();
             runHowlPmDoctorAndList();
+            markReady();
             return;
         }
         if (!pmExists) {
+            failReady();
             return;
         }
 
         runHowlPmInstall();
         final boolean shellAfter = new File(getShell()).isFile();
         if (!shellAfter) {
+            failReady();
             return;
         }
         ensureShellErgonomics();
         runHowlPmDoctorAndList();
+        markReady();
+    }
+
+    private void markReady() {
+        synchronized (stateLock) {
+            ready = true;
+            failed = false;
+            stateLock.notifyAll();
+        }
+    }
+
+    private void failReady() {
+        synchronized (stateLock) {
+            failed = true;
+            ready = false;
+            stateLock.notifyAll();
+        }
     }
 
     private boolean ensureDir(String path) {

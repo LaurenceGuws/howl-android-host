@@ -4,6 +4,7 @@ import howl.term.R;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -57,6 +58,7 @@ public final class UserlandSvc {
         final boolean pmExists = new File(howlPm).isFile();
 
         if (shellExists) {
+            ensureShellErgonomics();
             runHowlPmDoctorAndList();
             return;
         }
@@ -69,6 +71,7 @@ public final class UserlandSvc {
         if (!shellAfter) {
             return;
         }
+        ensureShellErgonomics();
         runHowlPmDoctorAndList();
     }
 
@@ -99,6 +102,74 @@ public final class UserlandSvc {
         }
         final int listRc = runHowlPm("list-available", "--manifest", manifestUrl, "--prefix", getPrefix());
         if (listRc != 0) {
+        }
+    }
+
+    private void ensureShellErgonomics() {
+        ensurePkgShim();
+        ensureBashRc();
+    }
+
+    private void ensurePkgShim() {
+        final File shim = new File(getPrefix() + "/bin/pkg");
+        if (shim.isFile()) {
+            return;
+        }
+        final String content = "#!/data/data/" + extractPackageName() + "/files/usr/bin/bash\n"
+                + "exec \"" + howlPm + "\" pkg \"$@\"\n";
+        writeExecutableFile(shim, content);
+    }
+
+    private void ensureBashRc() {
+        final File bashrc = new File(home + "/.bashrc");
+        if (bashrc.isFile()) {
+            return;
+        }
+        final String content =
+                "# howl android shell ergonomics\n"
+                        + "export PREFIX=\"" + getPrefix() + "\"\n"
+                        + "export HOME=\"" + home + "\"\n"
+                        + "export TMPDIR=\"" + tmp + "\"\n"
+                        + "export TERM=\"xterm-256color\"\n"
+                        + "export PATH=\"$PREFIX/bin:/system/bin:$PATH\"\n"
+                        + "alias ll='ls -lah'\n"
+                        + "alias la='ls -A'\n"
+                        + "alias l='ls -CF'\n"
+                        + "alias pkg='howl-pm pkg'\n"
+                        + "PS1='\\u@howl:\\w\\$ '\n";
+        writeFile(bashrc, content);
+    }
+
+    private String extractPackageName() {
+        final String marker = "/data/data/";
+        if (!prefix.startsWith(marker)) {
+            return "howl.term";
+        }
+        final String rest = prefix.substring(marker.length());
+        final int slash = rest.indexOf('/');
+        if (slash < 0) {
+            return "howl.term";
+        }
+        return rest.substring(0, slash);
+    }
+
+    private void writeExecutableFile(File file, String content) {
+        writeFile(file, content);
+        //noinspection ResultOfMethodCallIgnored
+        file.setExecutable(true, false);
+        //noinspection ResultOfMethodCallIgnored
+        file.setReadable(true, false);
+    }
+
+    private void writeFile(File file, String content) {
+        final File parent = file.getParentFile();
+        if (parent != null && !parent.isDirectory()) {
+            //noinspection ResultOfMethodCallIgnored
+            parent.mkdirs();
+        }
+        try (FileWriter writer = new FileWriter(file, false)) {
+            writer.write(content);
+        } catch (IOException err) {
         }
     }
 

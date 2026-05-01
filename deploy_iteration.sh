@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
 HOWL_TERM_ROOT="$REPO_ROOT/howl-term"
+HOWL_PM_ROOT="$REPO_ROOT/utils/howl-pm"
 LOG_DIR="$ROOT/build/reports/android"
 LOG_FILE="$LOG_DIR/deploy_iteration.log"
 SUMMARY_FILE="$LOG_DIR/deploy_iteration.summary"
@@ -12,9 +13,27 @@ ACTIVITY="howl.term/.Main"
 TIMEOUT_SECS="${TIMEOUT_SECS:-8}"
 ATTACH_LOGCAT="${ATTACH_LOGCAT:-0}"
 JNI_LIB_DIR="$ROOT/src/main/jniLibs/arm64-v8a"
+STRINGS_XML="$ROOT/src/main/res/values/strings.xml"
+HOWL_PM_DEFAULTS_GO="$HOWL_PM_ROOT/internal/pm/pm.go"
 
 mkdir -p "$LOG_DIR"
 mkdir -p "$JNI_LIB_DIR"
+
+sync_manifest_url() {
+  if [ ! -f "$HOWL_PM_DEFAULTS_GO" ] || [ ! -f "$STRINGS_XML" ]; then
+    return 0
+  fi
+  local url
+  url="$(sed -n 's/.*DefaultAndroidDevManifestURL = "\(https:\/\/github.com\/[^"]*android-dev-prefix\.release\.manifest\.json\)".*/\1/p' "$HOWL_PM_DEFAULTS_GO" | head -n 1)"
+  if [ -z "$url" ]; then
+    return 0
+  fi
+  if grep -q "<string name=\"userland_manifest_url\">$url</string>" "$STRINGS_XML"; then
+    return 0
+  fi
+  sed -i "s#<string name=\"userland_manifest_url\">.*</string>#<string name=\"userland_manifest_url\">$url</string>#" "$STRINGS_XML"
+  echo "synced_userland_manifest_url=$url"
+}
 
 pick_ndk_root() {
   if [ -n "${ANDROID_NDK_HOME:-}" ] && [ -d "$ANDROID_NDK_HOME" ]; then
@@ -50,6 +69,8 @@ if [ ! -d "$NDK_SYSROOT" ]; then
   echo "android_ndk_sysroot_missing=1 path=$NDK_SYSROOT"
   exit 1
 fi
+
+sync_manifest_url
 
 (
   cd "$HOWL_TERM_ROOT"

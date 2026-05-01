@@ -57,32 +57,51 @@ public class GpuSvc {
                         | EditorInfo.IME_FLAG_NO_FULLSCREEN
                         | EditorInfo.IME_ACTION_NONE;
                 return new BaseInputConnection(this, false) {
-                    private long lastPublishNs = 0L;
-                    private String lastPublishText = "";
+                    private String composingText = "";
 
                     private void publishText(CharSequence text) {
                         if (text == null || text.length() == 0) return;
                         final String s = text.toString();
-                        final long now = System.nanoTime();
-                        // De-dupe commit/key double-publish bursts from some IMEs.
-                        if (s.equals(lastPublishText) && (now - lastPublishNs) < 30_000_000L) {
-                            return;
-                        }
-                        lastPublishText = s;
-                        lastPublishNs = now;
                         hooks.onInputBytes(s.getBytes(StandardCharsets.UTF_8));
                     }
 
                     @Override
                     public boolean commitText(CharSequence text, int newCursorPosition) {
-                        publishText(text);
+                        final String committed = text == null ? "" : text.toString();
+                        if (!committed.isEmpty()) {
+                            if (committed.equals(composingText)) {
+                                // Already published incrementally during compose.
+                            } else if (committed.startsWith(composingText)) {
+                                final String suffix = committed.substring(composingText.length());
+                                publishText(suffix);
+                            } else {
+                                publishText(committed);
+                            }
+                        }
+                        composingText = "";
                         return true;
                     }
 
                     @Override
                     public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                        // Composition updates are pre-commit editor state.
-                        // Do not publish them as terminal input.
+                        final String next = text == null ? "" : text.toString();
+                        if (next.equals(composingText)) return true;
+
+                        if (next.startsWith(composingText)) {
+                            final String delta = next.substring(composingText.length());
+                            publishText(delta);
+                        } else if (composingText.startsWith(next)) {
+                            final int backspaces = composingText.length() - next.length();
+                            for (int i = 0; i < backspaces; i++) {
+                                hooks.onInputBytes(new byte[] { 0x7f });
+                            }
+                        } else {
+                            for (int i = 0; i < composingText.length(); i++) {
+                                hooks.onInputBytes(new byte[] { 0x7f });
+                            }
+                            publishText(next);
+                        }
+                        composingText = next;
                         return true;
                     }
 
@@ -107,8 +126,8 @@ public class GpuSvc {
                         }
                         final int codepoint = event.getUnicodeChar();
                         if (codepoint > 0 && !Character.isISOControl(codepoint)) {
-                            publishText(new String(Character.toChars(codepoint)));
-                            return true;
+                            // Textual keys should flow through compose/commit paths.
+                            return false;
                         }
                         return super.sendKeyEvent(event);
                     }

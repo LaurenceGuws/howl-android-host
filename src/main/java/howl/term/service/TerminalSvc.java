@@ -137,7 +137,6 @@ public final class TerminalSvc {
 
     public int publishInputBytes(byte[] data) {
         if (!Ready || !started) {
-            android.util.Log.e(TAG, "publishInputBytes failed: service not started");
             return -1;
         }
         if (data == null || data.length == 0) return 0;

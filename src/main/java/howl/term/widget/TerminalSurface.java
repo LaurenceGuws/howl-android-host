@@ -141,6 +141,7 @@ public final class TerminalSurface {
         view.setFocusableInTouchMode(true);
         view.setClickable(true);
         view.setOnKeyListener((v, keyCode, event) -> {
+            if (!termStarted) return false;
             if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) return false;
             byte[] bytes = mapKeyEvent(event);
             if (bytes == null) {

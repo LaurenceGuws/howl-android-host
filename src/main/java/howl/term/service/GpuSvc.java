@@ -57,9 +57,19 @@ public class GpuSvc {
                         | EditorInfo.IME_FLAG_NO_FULLSCREEN
                         | EditorInfo.IME_ACTION_NONE;
                 return new BaseInputConnection(this, false) {
+                    private long lastPublishNs = 0L;
+                    private String lastPublishText = "";
+
                     private void publishText(CharSequence text) {
                         if (text == null || text.length() == 0) return;
                         final String s = text.toString();
+                        final long now = System.nanoTime();
+                        // De-dupe commit/key double-publish bursts from some IMEs.
+                        if (s.equals(lastPublishText) && (now - lastPublishNs) < 30_000_000L) {
+                            return;
+                        }
+                        lastPublishText = s;
+                        lastPublishNs = now;
                         hooks.onInputBytes(s.getBytes(StandardCharsets.UTF_8));
                     }
 
@@ -97,8 +107,8 @@ public class GpuSvc {
                         }
                         final int codepoint = event.getUnicodeChar();
                         if (codepoint > 0 && !Character.isISOControl(codepoint)) {
-                            // Printable text should arrive via commitText.
-                            return false;
+                            publishText(new String(Character.toChars(codepoint)));
+                            return true;
                         }
                         return super.sendKeyEvent(event);
                     }

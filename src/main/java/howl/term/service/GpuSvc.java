@@ -210,6 +210,7 @@ public class GpuSvc {
                         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                         if (event.isCtrlPressed() || event.isAltPressed()) return false;
                         final int unicode = event.getUnicodeChar();
+                        if (unicode == ' ') return false;
                         return unicode != 0 && !Character.isISOControl(unicode);
                     }
 

@@ -2,16 +2,10 @@ package howl.term.service;
 
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
-import android.text.InputType;
-import android.view.KeyEvent;
-import android.view.inputmethod.BaseInputConnection;
-import android.view.inputmethod.EditorInfo;
-import android.view.inputmethod.InputConnection;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.nio.charset.StandardCharsets;
 
 /** GPU object: surface + texture present. */
 public final class Gpu {
@@ -47,189 +41,10 @@ public final class Gpu {
         void onSurfaceChanged(int width, int height);
         void onDrawFrame();
         void onSurfaceDestroyed();
-        void onInputBytes(byte[] bytes);
     }
 
     public android.view.View createSurface(android.app.Activity activity, State state, Hooks hooks) {
-        final GLSurfaceView view = new GLSurfaceView(activity) {
-            @Override
-            public boolean onCheckIsTextEditor() { return true; }
-
-            @Override
-            public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
-                outAttrs.inputType = InputType.TYPE_CLASS_TEXT
-                        | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                        | InputType.TYPE_TEXT_FLAG_MULTI_LINE;
-                outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
-                        | EditorInfo.IME_FLAG_NO_FULLSCREEN
-                        | EditorInfo.IME_ACTION_NONE;
-                return new BaseInputConnection(this, false) {
-                    private static final String SENTINEL = "........";
-                    private final StringBuilder editorBuffer = new StringBuilder();
-                    private int editorCursor = 0;
-                    private int editorComposingStart = -1;
-                    private int editorComposingEnd = -1;
-                    private String suppressedCommitText = null;
-
-                    { resetEditorState(); }
-
-                    private void publishText(CharSequence text) {
-                        if (text == null || text.length() == 0) return;
-                        hooks.onInputBytes(text.toString().getBytes(StandardCharsets.UTF_8));
-                    }
-
-                    private void sendCodepoint(int cp) {
-                        publishText(new String(Character.toChars(cp)));
-                    }
-
-                    private void resetEditorState() {
-                        editorBuffer.setLength(0);
-                        editorBuffer.append(SENTINEL).append('\n').append(SENTINEL).append('\n').append(SENTINEL);
-                        editorCursor = SENTINEL.length() + 1;
-                        editorComposingStart = -1;
-                        editorComposingEnd = -1;
-                    }
-
-                    private int editorLineStart() {
-                        int i = editorCursor - 1;
-                        while (i >= 0 && editorBuffer.charAt(i) != '\n') i--;
-                        return i + 1;
-                    }
-
-                    private String currentCompositionText() {
-                        if (editorComposingStart >= 0 && editorComposingEnd >= editorComposingStart) {
-                            return editorBuffer.substring(editorComposingStart, editorComposingEnd);
-                        }
-                        return "";
-                    }
-
-                    private int currentCompositionStart() {
-                        return editorComposingStart >= 0 ? editorComposingStart : editorCursor;
-                    }
-
-                    private int currentCompositionEnd() {
-                        return (editorComposingEnd >= editorComposingStart && editorComposingStart >= 0) ? editorComposingEnd : editorCursor;
-                    }
-
-                    private static int sharedPrefixLength(String left, String right) {
-                        int n = 0;
-                        final int max = Math.min(left.length(), right.length());
-                        while (n < max && left.charAt(n) == right.charAt(n)) n++;
-                        return n;
-                    }
-
-                    private String currentCommittedLinePrefix() {
-                        final int lineStart = editorLineStart();
-                        final int composeStart = currentCompositionStart();
-                        if (composeStart <= lineStart) return "";
-                        return editorBuffer.substring(lineStart, composeStart);
-                    }
-
-                    private String normalizeImeCompositionText(String text) {
-                        if (text.isEmpty()) return text;
-                        final String committedLinePrefix = currentCommittedLinePrefix();
-                        if (committedLinePrefix.isEmpty()) return text;
-                        if (!text.startsWith(committedLinePrefix)) return text;
-                        return text.substring(committedLinePrefix.length());
-                    }
-
-                    private boolean shouldSuppressCommitText(String text) {
-                        if (suppressedCommitText == null || !suppressedCommitText.equals(text)) return false;
-                        suppressedCommitText = null;
-                        return true;
-                    }
-
-                    private void clearComposition() {
-                        editorComposingStart = -1;
-                        editorComposingEnd = -1;
-                    }
-
-                    private void replaceComposition(String next) {
-                        final String previous = currentCompositionText();
-                        final int composeStart = currentCompositionStart();
-                        final int oldEnd = currentCompositionEnd();
-                        final int commonPrefix = sharedPrefixLength(previous, next);
-                        final int backspaces = previous.length() - commonPrefix;
-                        for (int i = 0; i < backspaces; i++) sendCodepoint('\u007f');
-                        final String appended = next.substring(commonPrefix);
-                        if (!appended.isEmpty()) publishText(appended);
-                        editorBuffer.delete(composeStart, oldEnd);
-                        editorBuffer.insert(composeStart, next);
-                        editorComposingStart = composeStart;
-                        editorComposingEnd = composeStart + next.length();
-                        editorCursor = editorComposingEnd;
-                        if (next.isEmpty()) clearComposition();
-                    }
-
-                    private boolean applyImeText(String rawText, boolean commit) {
-                        final String text = normalizeImeCompositionText(rawText);
-                        if (commit && shouldSuppressCommitText(text)) return true;
-                        if (editorComposingStart >= 0 || !commit) {
-                            replaceComposition(text);
-                            if (commit) clearComposition();
-                            return true;
-                        }
-                        if (text.isEmpty()) return true;
-                        editorBuffer.insert(editorCursor, text);
-                        editorCursor += text.length();
-                        publishText(text);
-                        return true;
-                    }
-
-                    @Override
-                    public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                        return applyImeText(text == null ? "" : text.toString(), false);
-                    }
-
-                    @Override
-                    public boolean finishComposingText() {
-                        clearComposition();
-                        return true;
-                    }
-
-                    @Override
-                    public boolean commitText(CharSequence text, int newCursorPosition) {
-                        return applyImeText(text == null ? "" : text.toString(), true);
-                    }
-
-                    @Override
-                    public boolean deleteSurroundingText(int beforeLength, int afterLength) {
-                        if (beforeLength > 0) {
-                            final int delStart = Math.max(0, editorCursor - beforeLength);
-                            final int count = editorCursor - delStart;
-                            editorBuffer.delete(delStart, editorCursor);
-                            editorCursor = delStart;
-                            for (int i = 0; i < count; i++) sendCodepoint('\u007f');
-                        }
-                        if (afterLength > 0) {
-                            final int delEnd = Math.min(editorBuffer.length(), editorCursor + afterLength);
-                            editorBuffer.delete(editorCursor, delEnd);
-                        }
-                        return true;
-                    }
-
-                    private boolean shouldBypassImePrintableKeyEvent(KeyEvent event) {
-                        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-                        if (event.isCtrlPressed() || event.isAltPressed()) return false;
-                        final int unicode = event.getUnicodeChar();
-                        return unicode != 0 && !Character.isISOControl(unicode);
-                    }
-
-                    @Override
-                    public boolean sendKeyEvent(KeyEvent event) {
-                        if (shouldBypassImePrintableKeyEvent(event)) return true;
-                        if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
-                        final byte[] mapped = Input.mapKeyEvent(event);
-                        if (mapped != null && mapped.length > 0) {
-                            hooks.onInputBytes(mapped);
-                            return true;
-                        }
-                        if (shouldBypassImePrintableKeyEvent(event)) return true;
-                        return super.sendKeyEvent(event);
-                    }
-                };
-            }
-        };
+        final GLSurfaceView view = new GLSurfaceView(activity);
         view.setEGLContextClientVersion(2);
         view.setPreserveEGLContextOnPause(true);
         view.setRenderer(new GLSurfaceView.Renderer() {
@@ -256,13 +71,6 @@ public final class Gpu {
             @Override public void surfaceCreated(android.view.SurfaceHolder holder) {}
             @Override public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {}
             @Override public void surfaceDestroyed(android.view.SurfaceHolder holder) { hooks.onSurfaceDestroyed(); }
-        });
-        view.setOnKeyListener((v, code, event) -> {
-            if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) return false;
-            byte[] mapped = Input.mapKeyEvent(event);
-            if (mapped == null || mapped.length == 0) return false;
-            hooks.onInputBytes(mapped);
-            return true;
         });
         view.setFocusable(true);
         view.setFocusableInTouchMode(true);

@@ -1,8 +1,12 @@
 package howl.term;
 
+import howl.term.input.HardwareKeyboardController;
 import howl.term.service.Config;
 import howl.term.service.Input;
+import howl.term.service.ShellLaunch;
 import howl.term.service.Userland;
+import howl.term.service.UserlandManager;
+import howl.term.service.UserlandWorkflowController;
 import howl.term.service.Window;
 import howl.term.widget.AssistBar;
 import howl.term.widget.SidePanel;
@@ -13,7 +17,10 @@ public final class Main extends android.app.Activity {
     private final Window window = new Window();
 
     private Userland userland;
+    private UserlandManager userlandManager;
+    private UserlandWorkflowController workflowController;
     private TermInstance termInstance;
+    private HardwareKeyboardController hardwareKeyboard;
     private AssistBar assistBar;
     private SidePanel sidePanel;
 
@@ -21,8 +28,95 @@ public final class Main extends android.app.Activity {
     protected void onCreate(android.os.Bundle state) {
         super.onCreate(state);
         userland = new Userland(this);
-        userland.start();
+        userlandManager = new UserlandManager(userland);
+        workflowController = new UserlandWorkflowController(userland);
+        userlandManager.start();
         final Config cfg = Config.load(this);
+        final UserlandManager.LaunchPlan launchPlan = userlandManager.resolveLaunch(cfg, 12000);
+        if (!launchPlan.userlandReady || launchPlan.shellLaunch.shell == null || !new java.io.File(launchPlan.shellLaunch.shell).isFile()) {
+            showUserlandRecovery(cfg);
+            return;
+        }
+        launchTerminal(cfg, launchPlan.shellLaunch);
+    }
+
+    private void showUserlandRecovery(Config cfg) {
+        final float density = getResources().getDisplayMetrics().density;
+        final int pad = Math.round(20 * density);
+        final int gap = Math.round(12 * density);
+
+        final android.widget.LinearLayout root = new android.widget.LinearLayout(this);
+        root.setOrientation(android.widget.LinearLayout.VERTICAL);
+        root.setGravity(android.view.Gravity.CENTER);
+        root.setPadding(pad, pad, pad, pad);
+        root.setBackgroundColor(0xFF101215);
+
+        final android.widget.TextView title = new android.widget.TextView(this);
+        title.setText("Userland Not Ready");
+        title.setTextColor(0xFFFFFFFF);
+        title.setTextSize(20f);
+
+        final android.widget.TextView subtitle = new android.widget.TextView(this);
+        subtitle.setText("Configured shell is unavailable. Run repair to install/restore userland.");
+        subtitle.setTextColor(0xFFB9C0CC);
+        subtitle.setTextSize(14f);
+        subtitle.setGravity(android.view.Gravity.CENTER);
+
+        final android.widget.Button retry = new android.widget.Button(this);
+        retry.setText("Run Repair");
+
+        final android.widget.TextView status = new android.widget.TextView(this);
+        status.setTextColor(0xFF9AA4B2);
+        status.setTextSize(13f);
+        status.setText("Waiting...");
+
+        retry.setOnClickListener(v -> workflowController.startRepair(new UserlandWorkflowController.Listener() {
+            @Override
+            public void onStarted() {
+                retry.setEnabled(false);
+                status.setText("Repair in progress...");
+            }
+
+            @Override
+            public void onFinished(boolean ok) {
+                retry.setEnabled(true);
+                if (!ok) {
+                    status.setText("Repair failed. Check runtime logs, then retry.");
+                    return;
+                }
+                final UserlandManager.LaunchPlan launchPlan = userlandManager.resolveLaunch(cfg, 2000);
+                if (!launchPlan.userlandReady || launchPlan.shellLaunch.shell == null || !new java.io.File(launchPlan.shellLaunch.shell).isFile()) {
+                    status.setText("Repair completed, but shell still unavailable.");
+                    return;
+                }
+                launchTerminal(cfg, launchPlan.shellLaunch);
+            }
+        }));
+
+        root.addView(title);
+        final android.widget.LinearLayout.LayoutParams subtitleLp = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        subtitleLp.topMargin = gap;
+        root.addView(subtitle, subtitleLp);
+        final android.widget.LinearLayout.LayoutParams buttonLp = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        buttonLp.topMargin = gap * 2;
+        root.addView(retry, buttonLp);
+        final android.widget.LinearLayout.LayoutParams statusLp = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        statusLp.topMargin = gap;
+        root.addView(status, statusLp);
+
+        setContentView(root);
+    }
+
+    private void launchTerminal(Config cfg, ShellLaunch shellLaunch) {
 
         final android.widget.FrameLayout root = window.root(this);
         final android.widget.FrameLayout app = window.container(this);
@@ -32,7 +126,18 @@ public final class Main extends android.app.Activity {
         final android.view.View bottomEdge = window.container(this);
         final android.view.View scrim = window.container(this);
 
-        termInstance = new TermInstance(userland, cfg);
+        termInstance = new TermInstance(cfg, shellLaunch);
+        hardwareKeyboard = new HardwareKeyboardController(new HardwareKeyboardController.Host() {
+            @Override
+            public howl.term.input.ShellInputView shellInputView() {
+                return termInstance != null ? termInstance.shellInputView() : null;
+            }
+
+            @Override
+            public void focusInput() {
+                if (termInstance != null) termInstance.focusInput();
+            }
+        });
         assistBar = new AssistBar(this, window);
         sidePanel = new SidePanel(this, window);
         final android.view.View termView = termInstance.view(this);
@@ -60,7 +165,7 @@ public final class Main extends android.app.Activity {
         window.mount(app, bottomEdge, bottomParams);
 
         window.mount(surfaceBox, termView, window.fill());
-        assistBar.setImeAnchor(termView);
+        assistBar.setImeAnchor(termInstance.imeAnchor());
 
         window.setBackground(scrim, 0x55000000);
         window.mount(overlay, scrim, window.fill());
@@ -98,5 +203,13 @@ public final class Main extends android.app.Activity {
     protected void onPause() {
         if (termInstance != null) termInstance.onPause();
         super.onPause();
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (hardwareKeyboard != null && hardwareKeyboard.handleDispatchKeyEvent(event)) {
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 }

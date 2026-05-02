@@ -4,6 +4,8 @@ import howl.term.R;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -18,6 +20,7 @@ public final class Userland {
     private final String howlPm;
     private final String shell;
     private final String manifestUrl;
+    private final String bootstrapMarker;
     private boolean started;
     private volatile boolean ready;
     private volatile boolean failed;
@@ -31,6 +34,7 @@ public final class Userland {
         this.howlPm = this.prefix + context.getString(R.string.userland_howl_pm_suffix);
         this.shell = this.prefix + context.getString(R.string.userland_shell_suffix);
         this.manifestUrl = context.getString(R.string.userland_manifest_url);
+        this.bootstrapMarker = this.prefix + "/var/lib/howl/bootstrap.v1.ok";
         this.started = false;
         this.ready = false;
         this.failed = false;
@@ -57,8 +61,34 @@ public final class Userland {
                 + "export TERM=\"xterm-256color\";"
                 + "export PATH=\"$PREFIX/bin:/system/bin:$PATH\";"
                 + "export LD_LIBRARY_PATH=\"$PREFIX/lib\";"
+                + "export HOWL_PM_HOST_PLATFORM=\"android\";"
                 + "cd \"$HOME\";"
                 + "exec \"" + shell + "\" -i";
+    }
+
+    public String buildLoginCommand(String shellPath, String startPath, String commandText) {
+        final String useShell = (shellPath != null && !shellPath.trim().isEmpty()) ? shellPath.trim() : shell;
+        final String useStart = (startPath != null && !startPath.trim().isEmpty()) ? startPath.trim() : home;
+        if (commandText != null && !commandText.trim().isEmpty()) {
+            return "cd -- \"" + escapeDoubleQuoted(useStart) + "\" && " + commandText;
+        }
+        return "cd -- \"" + escapeDoubleQuoted(useStart) + "\" && exec \"" + escapeDoubleQuoted(useShell) + "\" -il";
+    }
+
+    public ShellLaunch resolveLaunch(Config cfg, long timeoutMs) {
+        final boolean readyNow = waitUntilReady(timeoutMs);
+        String shellPath = cfg.term.shell != null ? cfg.term.shell : getShell();
+        String startPath = cfg.term.startPath != null ? cfg.term.startPath : getHome();
+        String commandText = null;
+        final boolean explicitCommand = cfg.term.command != null && !cfg.term.command.trim().isEmpty();
+        final boolean explicitStartPath = cfg.term.startPath != null
+                && !cfg.term.startPath.trim().isEmpty()
+                && !cfg.term.startPath.trim().equals(getHome());
+        if (explicitCommand || explicitStartPath) {
+            commandText = buildLoginCommand(shellPath, startPath, cfg.term.command);
+        }
+        if (!readyNow || shellPath == null || !new File(shellPath).isFile()) commandText = null;
+        return new ShellLaunch(shellPath, commandText);
     }
 
     public boolean waitUntilReady(long timeoutMs) {
@@ -86,6 +116,39 @@ public final class Userland {
         new Thread(this::initUserland, "howl-userland-init").start();
     }
 
+    public boolean isShellReady() {
+        final File shellFile = new File(getShell());
+        return shellFile.isFile() && shellFile.canExecute() && isGnuBashBinary();
+    }
+
+    public boolean repairAndRecheck() {
+        synchronized (stateLock) {
+            ready = false;
+            failed = false;
+        }
+        if (!ensureDir(home) || !ensureDir(tmp)) {
+            failReady();
+            return false;
+        }
+        if (isShellReady()) {
+            ensureShellErgonomics();
+            markReady();
+            return true;
+        }
+        if (!new File(howlPm).isFile()) {
+            failReady();
+            return false;
+        }
+        final int installRc = runHowlPmInstallWithRetry();
+        if (installRc != 0 || !waitForBashValidity(8, 200)) {
+            failReady();
+            return false;
+        }
+        ensureShellErgonomics();
+        markReady();
+        return true;
+    }
+
     private void initUserland() {
         synchronized (stateLock) {
             ready = false;
@@ -100,13 +163,15 @@ public final class Userland {
             return;
         }
 
-        final boolean shellExists = new File(getShell()).isFile();
-        final boolean shellIsBash = shellExists && isGnuBashBinary();
+        final File shellFile = new File(getShell());
+        final boolean shellExists = shellFile.isFile();
+        final boolean shellExec = shellFile.canExecute();
+        final boolean shellIsBash = shellExists && shellExec && isGnuBashBinary();
         final boolean pmExists = new File(howlPm).isFile();
+        android.util.Log.i(TAG, "userland.detect shellExists=" + shellExists + " shellExec=" + shellExec + " shellIsBash=" + shellIsBash + " pmExists=" + pmExists);
 
-        if (shellExists && shellIsBash) {
+        if (shellExists && shellExec && shellIsBash) {
             ensureShellErgonomics();
-            runHowlPmDoctorAndList();
             markReady();
             return;
         }
@@ -116,19 +181,10 @@ public final class Userland {
             return;
         }
 
-        final int installRc = runHowlPmInstall();
-        if (installRc != 0) {
-            android.util.Log.e(TAG, "userland install failed: rc=" + installRc);
-        }
-        final boolean shellAfter = new File(getShell()).isFile() && isGnuBashBinary();
-        if (!shellAfter) {
-            android.util.Log.e(TAG, "userland init failed: bash missing or invalid at " + getShell());
-            failReady();
-            return;
-        }
-        ensureShellErgonomics();
-        runHowlPmDoctorAndList();
-        markReady();
+        // Keep install out of session startup path; startup must not race app update sync.
+        android.util.Log.e(TAG, "userland init failed: bash missing or invalid at " + getShell());
+        failReady();
+        return;
     }
 
     private void markReady() {
@@ -159,13 +215,42 @@ public final class Userland {
     private int runHowlPmInstall() {
         final int rc = runHowlPm(
                 "install",
-                "--manifest",
-                manifestUrl,
+                "dev-baseline",
                 "--prefix",
                 getPrefix(),
-                "dev-baseline");
+                "--manifest",
+                manifestUrl);
         if (rc != 0) android.util.Log.e(TAG, "howl-pm install rc=" + rc);
         return rc;
+    }
+
+    private int runHowlPmInstallWithRetry() {
+        int last = -1;
+        for (int i = 0; i < 8; i++) {
+            last = runHowlPmInstall();
+            if (last == 0) return 0;
+            try {
+                Thread.sleep(150L);
+            } catch (InterruptedException err) {
+                Thread.currentThread().interrupt();
+                return last;
+            }
+        }
+        return last;
+    }
+
+    private boolean waitForBashValidity(int attempts, long delayMs) {
+        for (int i = 0; i < attempts; i++) {
+            final File bash = new File(getShell());
+            if (bash.isFile() && bash.canExecute() && isGnuBashBinary()) return true;
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException err) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     private void runHowlPmDoctorAndList() {
@@ -178,6 +263,30 @@ public final class Userland {
             android.util.Log.e(TAG, "howl-pm list rc=" + listRc);
         }
     }
+
+    private void runFirstBootPackageBootstrap() {
+        final File marker = new File(bootstrapMarker);
+        if (marker.isFile()) return;
+
+        int rc = runHowlPm("pkg", "install", "ascii-rain", "btop", "nvim");
+        if (rc != 0) {
+            rc = runHowlPm("pkg", "install", "ascii-rain", "btop", "neovim");
+        }
+        if (rc != 0) {
+            android.util.Log.e(TAG, "userland bootstrap pkg install failed rc=" + rc);
+            return;
+        }
+
+        final File parent = marker.getParentFile();
+        if (parent != null && !parent.isDirectory()) {
+            //noinspection ResultOfMethodCallIgnored
+            parent.mkdirs();
+        }
+        writeFile(marker, "ok\n");
+    }
+
+    // Keep install/doctor work out of shell startup path.
+    // Zide's stable path separates readiness/session startup from maintenance side effects.
 
     private boolean isGnuBashBinary() {
         final File bash = new File(getShell());
@@ -197,7 +306,7 @@ public final class Userland {
             return;
         }
         final String content = "#!/data/data/" + extractPackageName() + "/files/usr/bin/bash\n"
-                + "exec \"" + howlPm + "\" pkg \"$@\"\n";
+                + "exec \"" + howlPm + "\" pkg --prefix \"$PREFIX\" \"$@\"\n";
         writeExecutableFile(shim, content);
     }
 
@@ -222,6 +331,7 @@ public final class Userland {
                         + "export HOSTNAME=\"howl\"\n"
                         + "export PATH=\"$PREFIX/bin:/system/bin:$PATH\"\n"
                         + "export LD_LIBRARY_PATH=\"$PREFIX/lib\"\n"
+                        + "export HOWL_PM_HOST_PLATFORM=\"android\"\n"
                         + "\n"
                         + "HISTCONTROL=ignoreboth\n"
                         + "shopt -s histappend\n"
@@ -318,6 +428,10 @@ public final class Userland {
         file.setReadable(true, false);
     }
 
+    private String escapeDoubleQuoted(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
     private void writeFile(File file, String content) {
         final File parent = file.getParentFile();
         if (parent != null && !parent.isDirectory()) {
@@ -331,8 +445,9 @@ public final class Userland {
     }
 
     private int runHowlPm(String... args) {
+        final String pmExecutable = prepareHowlPmRunner();
         final String[] cmd = new String[args.length + 1];
-        cmd[0] = howlPm;
+        cmd[0] = pmExecutable;
         System.arraycopy(args, 0, cmd, 1, args.length);
         try {
             final ProcessBuilder pb = new ProcessBuilder(cmd);
@@ -344,17 +459,50 @@ public final class Userland {
             pb.environment().put("PATH", getPrefix() + "/bin:/system/bin");
             pb.environment().put("SHELL", getShell());
             pb.environment().put("LD_LIBRARY_PATH", getPrefix() + "/lib");
+            pb.environment().put("HOWL_PM_HOST_PLATFORM", "android");
             final Process process = pb.start();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                while (reader.readLine() != null) {}
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    android.util.Log.i(TAG, "howl-pm> " + line);
+                }
             }
-            return process.waitFor();
+            final int rc = process.waitFor();
+            if (rc != 0) {
+                android.util.Log.e(TAG, "howl-pm failed rc=" + rc + " cmd=" + String.join(" ", cmd));
+            }
+            return rc;
         } catch (IOException err) {
+            android.util.Log.e(TAG, "howl-pm exec io error", err);
         } catch (InterruptedException err) {
             Thread.currentThread().interrupt();
+            android.util.Log.e(TAG, "howl-pm exec interrupted", err);
         }
         return -1;
+    }
+
+    private String prepareHowlPmRunner() {
+        final File source = new File(howlPm);
+        if (!source.isFile()) return howlPm;
+        final File runner = new File(tmp, "howl-pm-runner");
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(runner, false)) {
+            final byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+            }
+            out.getFD().sync();
+            //noinspection ResultOfMethodCallIgnored
+            runner.setExecutable(true, false);
+            //noinspection ResultOfMethodCallIgnored
+            runner.setReadable(true, false);
+            return runner.getAbsolutePath();
+        } catch (IOException err) {
+            android.util.Log.e(TAG, "prepareHowlPmRunner failed; using direct howl-pm", err);
+            return howlPm;
+        }
     }
 
     private int runCommand(String... cmd) {
@@ -368,16 +516,23 @@ public final class Userland {
             pb.environment().put("PATH", getPrefix() + "/bin:/system/bin");
             pb.environment().put("SHELL", getShell());
             pb.environment().put("LD_LIBRARY_PATH", getPrefix() + "/lib");
+            pb.environment().put("HOWL_PM_HOST_PLATFORM", "android");
             final Process process = pb.start();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 while (reader.readLine() != null) {}
             }
-            return process.waitFor();
+            final int rc = process.waitFor();
+            if (rc != 0) {
+                android.util.Log.e(TAG, "runCommand failed rc=" + rc + " cmd=" + String.join(" ", cmd));
+            }
+            return rc;
         } catch (IOException err) {
+            android.util.Log.e(TAG, "runCommand io error", err);
             return -1;
         } catch (InterruptedException err) {
             Thread.currentThread().interrupt();
+            android.util.Log.e(TAG, "runCommand interrupted", err);
             return -1;
         }
     }

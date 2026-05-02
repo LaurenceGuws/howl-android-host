@@ -29,6 +29,10 @@ public final class TermInstance {
     private volatile ShellInputView inputView;
     private volatile boolean surfaceReady;
     private volatile boolean running;
+    private volatile android.widget.FrameLayout overlayLayer;
+    private volatile android.view.View scrollTrackView;
+    private volatile android.view.View scrollThumbView;
+    private volatile android.widget.TextView liveChipView;
 
     private int texture;
     private Thread wakeThread;
@@ -40,6 +44,9 @@ public final class TermInstance {
     private int scrollFlingLastY;
     private float scrollRemainderRows;
     private int cellHeightPx;
+    private int lastOverlayCount;
+    private int lastOverlayOffset;
+    private long lastOverlayRefreshMs;
 
     public TermInstance(Config cfg, ShellLaunch shellLaunch) {
         if (cfg == null) throw new IllegalArgumentException("config required");
@@ -57,6 +64,10 @@ public final class TermInstance {
         this.gridH = 1;
         this.surfaceReady = false;
         this.running = false;
+        this.overlayLayer = null;
+        this.scrollTrackView = null;
+        this.scrollThumbView = null;
+        this.liveChipView = null;
         this.texture = 0;
         this.wakeThread = null;
         this.lastFrameLogMs = 0L;
@@ -67,6 +78,9 @@ public final class TermInstance {
         this.scrollFlingLastY = 0;
         this.scrollRemainderRows = 0f;
         this.cellHeightPx = 24;
+        this.lastOverlayCount = -1;
+        this.lastOverlayOffset = -1;
+        this.lastOverlayRefreshMs = 0L;
     }
 
     public android.view.View view(android.app.Activity activity) {
@@ -149,6 +163,10 @@ public final class TermInstance {
                     final long inputToFrameMs = (inputAt > 0L && inputAt <= now) ? (now - inputAt) : -1L;
                     android.util.Log.i(TAG, "termInst.frame ok rw=" + renderW + " rh=" + renderH + " tex=" + texture + " inputToFrameMs=" + inputToFrameMs + " queued=" + renderQueued.get());
                 }
+                if (now - lastOverlayRefreshMs > 250) {
+                    lastOverlayRefreshMs = now;
+                    refreshScrollOverlay();
+                }
                 if (needsFollowup) {
                     requestRender(glView);
                 }
@@ -224,6 +242,62 @@ public final class TermInstance {
         container.addView(gl, new android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
+        final android.widget.FrameLayout overlay = new android.widget.FrameLayout(activity);
+        container.addView(overlay, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
+
+        final float density = activity.getResources().getDisplayMetrics().density;
+        final android.view.View track = new android.view.View(activity);
+        track.setBackgroundColor(0x336B7280);
+        final android.widget.FrameLayout.LayoutParams trackLp = new android.widget.FrameLayout.LayoutParams(
+                Math.round(4 * density),
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+        );
+        trackLp.gravity = android.view.Gravity.END;
+        trackLp.topMargin = Math.round(20 * density);
+        trackLp.bottomMargin = Math.round(20 * density);
+        trackLp.rightMargin = Math.round(4 * density);
+        overlay.addView(track, trackLp);
+
+        final android.view.View thumb = new android.view.View(activity);
+        thumb.setBackgroundColor(0xCCCBD5E1);
+        final android.widget.FrameLayout.LayoutParams thumbLp = new android.widget.FrameLayout.LayoutParams(
+                Math.round(4 * density),
+                Math.round(48 * density)
+        );
+        thumbLp.gravity = android.view.Gravity.END | android.view.Gravity.TOP;
+        thumbLp.topMargin = Math.round(20 * density);
+        thumbLp.rightMargin = Math.round(4 * density);
+        overlay.addView(thumb, thumbLp);
+
+        final android.widget.TextView liveChip = new android.widget.TextView(activity);
+        liveChip.setText("LIVE");
+        liveChip.setTextColor(0xFFE5E7EB);
+        liveChip.setTextSize(12f);
+        liveChip.setPadding(Math.round(10 * density), Math.round(6 * density), Math.round(10 * density), Math.round(6 * density));
+        liveChip.setBackgroundColor(0xCC111827);
+        liveChip.setOnClickListener(v -> {
+            if (!running) return;
+            final int rc = term.followLiveBottom();
+            if (rc >= 0) {
+                requestRender(glView);
+                refreshScrollOverlay();
+            }
+        });
+        final android.widget.FrameLayout.LayoutParams liveLp = new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+        );
+        liveLp.gravity = android.view.Gravity.END | android.view.Gravity.BOTTOM;
+        liveLp.rightMargin = Math.round(14 * density);
+        liveLp.bottomMargin = Math.round(14 * density);
+        overlay.addView(liveChip, liveLp);
+
+        this.overlayLayer = overlay;
+        this.scrollTrackView = track;
+        this.scrollThumbView = thumb;
+        this.liveChipView = liveChip;
         final android.widget.FrameLayout.LayoutParams inputLp = new android.widget.FrameLayout.LayoutParams(1, 1);
         inputLp.leftMargin = 0;
         inputLp.topMargin = 0;
@@ -249,6 +323,7 @@ public final class TermInstance {
         ref[0] = gl;
         this.surfaceView = container;
         this.glView = (gl instanceof android.opengl.GLSurfaceView) ? (android.opengl.GLSurfaceView) gl : null;
+        refreshScrollOverlay();
         return container;
     }
 
@@ -299,6 +374,10 @@ public final class TermInstance {
         term.stop();
         glView = null;
         inputView = null;
+        overlayLayer = null;
+        scrollTrackView = null;
+        scrollThumbView = null;
+        liveChipView = null;
         stopScrollFling();
     }
 
@@ -357,6 +436,44 @@ public final class TermInstance {
             term.setScrollbackOffset(nextOffset);
         }
         requestRender(glView);
+        refreshScrollOverlay();
+    }
+
+    private void refreshScrollOverlay() {
+        final android.widget.FrameLayout overlay = overlayLayer;
+        final android.view.View track = scrollTrackView;
+        final android.view.View thumb = scrollThumbView;
+        final android.widget.TextView liveChip = liveChipView;
+        if (overlay == null || track == null || thumb == null || liveChip == null) return;
+        overlay.post(() -> {
+            final int historyCount = term.currentScrollbackCount();
+            final int offset = term.currentScrollbackOffset();
+            if (historyCount == lastOverlayCount && offset == lastOverlayOffset && thumb.getHeight() > 0) return;
+            lastOverlayCount = historyCount;
+            lastOverlayOffset = offset;
+
+            final boolean hasHistory = historyCount > 0;
+            final boolean scrolled = offset > 0;
+            track.setVisibility(hasHistory ? android.view.View.VISIBLE : android.view.View.GONE);
+            thumb.setVisibility(hasHistory ? android.view.View.VISIBLE : android.view.View.GONE);
+            liveChip.setVisibility(scrolled ? android.view.View.VISIBLE : android.view.View.GONE);
+
+            if (!hasHistory) return;
+            final android.widget.FrameLayout.LayoutParams trackLp = (android.widget.FrameLayout.LayoutParams) track.getLayoutParams();
+            final int trackHeight = Math.max(1, overlay.getHeight() - trackLp.topMargin - trackLp.bottomMargin);
+            final int visibleRows = Math.max(1, renderH / Math.max(1, cellHeightPx));
+            final int totalRows = historyCount + visibleRows;
+            int thumbHeight = (int) Math.round((double) trackHeight * ((double) visibleRows / (double) Math.max(visibleRows, totalRows)));
+            thumbHeight = Math.max(Math.round(24 * overlay.getResources().getDisplayMetrics().density), Math.min(trackHeight, thumbHeight));
+            final int travel = Math.max(0, trackHeight - thumbHeight);
+            final double ratio = historyCount > 0 ? (double) offset / (double) historyCount : 0.0;
+            final int topOffset = (int) Math.round(ratio * travel);
+
+            final android.widget.FrameLayout.LayoutParams thumbLp = (android.widget.FrameLayout.LayoutParams) thumb.getLayoutParams();
+            thumbLp.height = thumbHeight;
+            thumbLp.topMargin = trackLp.topMargin + topOffset;
+            thumb.setLayoutParams(thumbLp);
+        });
     }
 
     private void scheduleScrollFlingFrame() {

@@ -3,6 +3,7 @@ package howl.term.service;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.text.InputType;
+import android.view.KeyEvent;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -14,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 
 /** GPU object: surface + texture present. */
 public final class Gpu {
+    private static final String TAG = "howl.term.runtime";
     public static final class State {
         public int texture;
         public int program;
@@ -24,6 +26,7 @@ public final class Gpu {
         public int textureWidth;
         public int textureHeight;
         public boolean frameReady;
+        public int drawSkipLogs;
 
         public State() {
             texture = 0;
@@ -35,6 +38,7 @@ public final class Gpu {
             textureWidth = 1;
             textureHeight = 1;
             frameReady = false;
+            drawSkipLogs = 0;
         }
     }
 
@@ -60,27 +64,168 @@ public final class Gpu {
                         | EditorInfo.IME_FLAG_NO_FULLSCREEN
                         | EditorInfo.IME_ACTION_NONE;
                 return new BaseInputConnection(this, false) {
-                    @Override
-                    public boolean commitText(CharSequence text, int newCursorPosition) {
-                        if (text == null || text.length() == 0) return true;
+                    private static final String SENTINEL = "........";
+                    private final StringBuilder editorBuffer = new StringBuilder();
+                    private int editorCursor = 0;
+                    private int editorComposingStart = -1;
+                    private int editorComposingEnd = -1;
+                    private String suppressedCommitText = null;
+
+                    { resetEditorState(); }
+
+                    private void publishText(CharSequence text) {
+                        if (text == null || text.length() == 0) return;
                         hooks.onInputBytes(text.toString().getBytes(StandardCharsets.UTF_8));
+                    }
+
+                    private void sendCodepoint(int cp) {
+                        publishText(new String(Character.toChars(cp)));
+                    }
+
+                    private void resetEditorState() {
+                        editorBuffer.setLength(0);
+                        editorBuffer.append(SENTINEL).append('\n').append(SENTINEL).append('\n').append(SENTINEL);
+                        editorCursor = SENTINEL.length() + 1;
+                        editorComposingStart = -1;
+                        editorComposingEnd = -1;
+                    }
+
+                    private int editorLineStart() {
+                        int i = editorCursor - 1;
+                        while (i >= 0 && editorBuffer.charAt(i) != '\n') i--;
+                        return i + 1;
+                    }
+
+                    private String currentCompositionText() {
+                        if (editorComposingStart >= 0 && editorComposingEnd >= editorComposingStart) {
+                            return editorBuffer.substring(editorComposingStart, editorComposingEnd);
+                        }
+                        return "";
+                    }
+
+                    private int currentCompositionStart() {
+                        return editorComposingStart >= 0 ? editorComposingStart : editorCursor;
+                    }
+
+                    private int currentCompositionEnd() {
+                        return (editorComposingEnd >= editorComposingStart && editorComposingStart >= 0) ? editorComposingEnd : editorCursor;
+                    }
+
+                    private static int sharedPrefixLength(String left, String right) {
+                        int n = 0;
+                        final int max = Math.min(left.length(), right.length());
+                        while (n < max && left.charAt(n) == right.charAt(n)) n++;
+                        return n;
+                    }
+
+                    private String currentCommittedLinePrefix() {
+                        final int lineStart = editorLineStart();
+                        final int composeStart = currentCompositionStart();
+                        if (composeStart <= lineStart) return "";
+                        return editorBuffer.substring(lineStart, composeStart);
+                    }
+
+                    private String normalizeImeCompositionText(String text) {
+                        if (text.isEmpty()) return text;
+                        final String committedLinePrefix = currentCommittedLinePrefix();
+                        if (committedLinePrefix.isEmpty()) return text;
+                        if (!text.startsWith(committedLinePrefix)) return text;
+                        return text.substring(committedLinePrefix.length());
+                    }
+
+                    private boolean shouldSuppressCommitText(String text) {
+                        if (suppressedCommitText == null || !suppressedCommitText.equals(text)) return false;
+                        suppressedCommitText = null;
+                        return true;
+                    }
+
+                    private void clearComposition() {
+                        editorComposingStart = -1;
+                        editorComposingEnd = -1;
+                    }
+
+                    private void replaceComposition(String next) {
+                        final String previous = currentCompositionText();
+                        final int composeStart = currentCompositionStart();
+                        final int oldEnd = currentCompositionEnd();
+                        final int commonPrefix = sharedPrefixLength(previous, next);
+                        final int backspaces = previous.length() - commonPrefix;
+                        for (int i = 0; i < backspaces; i++) sendCodepoint('\u007f');
+                        final String appended = next.substring(commonPrefix);
+                        if (!appended.isEmpty()) publishText(appended);
+                        editorBuffer.delete(composeStart, oldEnd);
+                        editorBuffer.insert(composeStart, next);
+                        editorComposingStart = composeStart;
+                        editorComposingEnd = composeStart + next.length();
+                        editorCursor = editorComposingEnd;
+                        if (next.isEmpty()) clearComposition();
+                    }
+
+                    private boolean applyImeText(String rawText, boolean commit) {
+                        final String text = normalizeImeCompositionText(rawText);
+                        if (commit && shouldSuppressCommitText(text)) return true;
+                        if (editorComposingStart >= 0 || !commit) {
+                            replaceComposition(text);
+                            if (commit) clearComposition();
+                            return true;
+                        }
+                        if (text.isEmpty()) return true;
+                        editorBuffer.insert(editorCursor, text);
+                        editorCursor += text.length();
+                        publishText(text);
                         return true;
                     }
 
                     @Override
                     public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                        if (text == null || text.length() == 0) return true;
-                        hooks.onInputBytes(text.toString().getBytes(StandardCharsets.UTF_8));
+                        return applyImeText(text == null ? "" : text.toString(), false);
+                    }
+
+                    @Override
+                    public boolean finishComposingText() {
+                        clearComposition();
                         return true;
                     }
 
                     @Override
+                    public boolean commitText(CharSequence text, int newCursorPosition) {
+                        return applyImeText(text == null ? "" : text.toString(), true);
+                    }
+
+                    @Override
                     public boolean deleteSurroundingText(int beforeLength, int afterLength) {
-                        if (beforeLength <= 0) return true;
-                        final byte[] del = new byte[Math.max(1, beforeLength)];
-                        for (int i = 0; i < del.length; i++) del[i] = 0x7f;
-                        hooks.onInputBytes(del);
+                        if (beforeLength > 0) {
+                            final int delStart = Math.max(0, editorCursor - beforeLength);
+                            final int count = editorCursor - delStart;
+                            editorBuffer.delete(delStart, editorCursor);
+                            editorCursor = delStart;
+                            for (int i = 0; i < count; i++) sendCodepoint('\u007f');
+                        }
+                        if (afterLength > 0) {
+                            final int delEnd = Math.min(editorBuffer.length(), editorCursor + afterLength);
+                            editorBuffer.delete(editorCursor, delEnd);
+                        }
                         return true;
+                    }
+
+                    private boolean shouldBypassImePrintableKeyEvent(KeyEvent event) {
+                        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                        if (event.isCtrlPressed() || event.isAltPressed()) return false;
+                        final int unicode = event.getUnicodeChar();
+                        return unicode != 0 && !Character.isISOControl(unicode);
+                    }
+
+                    @Override
+                    public boolean sendKeyEvent(KeyEvent event) {
+                        if (shouldBypassImePrintableKeyEvent(event)) return true;
+                        if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
+                        final byte[] mapped = Input.mapKeyEvent(event);
+                        if (mapped != null && mapped.length > 0) {
+                            hooks.onInputBytes(mapped);
+                            return true;
+                        }
+                        if (shouldBypassImePrintableKeyEvent(event)) return true;
+                        return super.sendKeyEvent(event);
                     }
                 };
             }
@@ -115,12 +260,6 @@ public final class Gpu {
         view.setOnKeyListener((v, code, event) -> {
             if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) return false;
             byte[] mapped = Input.mapKeyEvent(event);
-            if (mapped == null) {
-                final int cp = event.getUnicodeChar();
-                if (cp > 0 && !Character.isISOControl(cp)) {
-                    mapped = new String(Character.toChars(cp)).getBytes(StandardCharsets.UTF_8);
-                }
-            }
             if (mapped == null || mapped.length == 0) return false;
             hooks.onInputBytes(mapped);
             return true;
@@ -156,6 +295,7 @@ public final class Gpu {
         final ByteBuffer zeros = ByteBuffer.allocateDirect(w * h * 4);
         GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, w, h, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, zeros);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        android.util.Log.i(TAG, "gpu.ensureTextureSize tex=" + state.texture + " " + w + "x" + h);
     }
 
     private void initTexture(State state) {
@@ -183,6 +323,10 @@ public final class Gpu {
         if (state.program == 0) initProgram(state);
         if (state.program == 0 || state.texture == 0 || !state.frameReady) {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            if (state.texture != 0 && state.drawSkipLogs < 20) {
+                state.drawSkipLogs++;
+                android.util.Log.i(TAG, "gpu.draw skipped program=" + state.program + " frameReady=" + state.frameReady + " tex=" + state.texture);
+            }
             return;
         }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
@@ -200,6 +344,10 @@ public final class Gpu {
         GLES20.glDisableVertexAttribArray(state.posHandle);
         GLES20.glDisableVertexAttribArray(state.uvHandle);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        final int glErr = GLES20.glGetError();
+        if (glErr != GLES20.GL_NO_ERROR) {
+            android.util.Log.e(TAG, "gpu.draw glError=0x" + Integer.toHexString(glErr));
+        }
     }
 
     private void initProgram(State state) {
@@ -220,6 +368,7 @@ public final class Gpu {
         if (linked[0] == 0) {
             GLES20.glDeleteProgram(state.program);
             state.program = 0;
+            android.util.Log.e(TAG, "gpu.initProgram link failed");
             return;
         }
 
@@ -231,6 +380,7 @@ public final class Gpu {
         state.quad = ByteBuffer.allocateDirect(verts.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         state.quad.put(verts);
         state.quad.position(0);
+        android.util.Log.i(TAG, "gpu.initProgram ok program=" + state.program + " tex=" + state.texture);
     }
 
     private int compile(int type, String src) {

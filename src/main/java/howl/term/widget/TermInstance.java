@@ -26,6 +26,7 @@ public final class TermInstance {
 
     private int texture;
     private Thread wakeThread;
+    private long lastFrameLogMs;
 
     public TermInstance(Userland userland, Config cfg) {
         if (userland == null) throw new IllegalArgumentException("userland required");
@@ -44,6 +45,7 @@ public final class TermInstance {
         this.running = false;
         this.texture = 0;
         this.wakeThread = null;
+        this.lastFrameLogMs = 0L;
     }
 
     public android.view.View view(android.app.Activity activity) {
@@ -58,6 +60,7 @@ public final class TermInstance {
             public void onSurfaceCreated() {
                 texture = gpu.texture(gpuState);
                 gpu.markFrameReady(gpuState, false);
+                android.util.Log.i(TAG, "termInst.surfaceCreated tex=" + texture);
                 final boolean userlandReady = userland.waitUntilReady(4000);
                 String shell = cfg.term.shell != null ? cfg.term.shell : userland.getShell();
                 String command = cfg.term.command;
@@ -72,6 +75,18 @@ public final class TermInstance {
                 term.configure(shell != null ? shell : "/system/bin/sh", command);
                 running = term.start();
                 if (running) {
+                    final String fontPath = pickSystemMonoFont();
+                    if (fontPath != null) {
+                        final int fontRc = term.setPrimaryFontPath(fontPath);
+                        if (fontRc < 0) {
+                            android.util.Log.e(TAG, "setPrimaryFontPath failed rc=" + fontRc + " path=" + fontPath);
+                        }
+                    }
+                    final String[] fallbacks = pickSystemFallbackFonts();
+                    final int fallbackRc = term.setFallbackFontPaths(fallbacks);
+                    if (fallbackRc < 0) {
+                        android.util.Log.e(TAG, "setFallbackFontPaths failed rc=" + fallbackRc);
+                    }
                     startWakeThread();
                 } else {
                     android.util.Log.e(TAG, "terminal start failed shell=" + shell);
@@ -88,6 +103,7 @@ public final class TermInstance {
                 gpu.ensureTextureSize(gpuState, renderW, renderH);
                 gpu.markFrameReady(gpuState, false);
                 surfaceReady = true;
+                android.util.Log.i(TAG, "termInst.surfaceChanged render=" + renderW + "x" + renderH + " grid=" + gridW + "x" + gridH + " tex=" + texture);
                 requestRender(ref[0]);
             }
 
@@ -108,6 +124,11 @@ public final class TermInstance {
                     return;
                 }
                 gpu.markFrameReady(gpuState, true);
+                final long now = android.os.SystemClock.uptimeMillis();
+                if (now - lastFrameLogMs > 1000) {
+                    lastFrameLogMs = now;
+                    android.util.Log.i(TAG, "termInst.frame ok rw=" + renderW + " rh=" + renderH + " tex=" + texture);
+                }
             }
 
             @Override
@@ -187,5 +208,33 @@ public final class TermInstance {
         if (view == null) return;
         if (!renderQueued.compareAndSet(false, true)) return;
         view.post(() -> gpu.requestRender(view));
+    }
+
+    private static String pickSystemMonoFont() {
+        final String[] candidates = new String[] {
+                "/system/fonts/NotoSansMono-Regular.ttf",
+                "/system/fonts/RobotoMono-Regular.ttf",
+                "/system/fonts/DroidSansMono.ttf",
+                "/system/fonts/JetBrainsMono-Regular.ttf"
+        };
+        for (String path : candidates) {
+            if (new java.io.File(path).isFile()) return path;
+        }
+        return null;
+    }
+
+    private static String[] pickSystemFallbackFonts() {
+        final String[] candidates = new String[] {
+                "/system/fonts/NotoSansSymbols-Regular-Subsetted.ttf",
+                "/system/fonts/NotoSansSymbols2-Regular-Subsetted.ttf",
+                "/system/fonts/NotoColorEmoji.ttf",
+                "/system/fonts/SamsungColorEmoji.ttf",
+                "/system/fonts/NotoSans-Regular.ttf"
+        };
+        final java.util.ArrayList<String> paths = new java.util.ArrayList<>();
+        for (String path : candidates) {
+            if (new java.io.File(path).isFile()) paths.add(path);
+        }
+        return paths.toArray(new String[0]);
     }
 }

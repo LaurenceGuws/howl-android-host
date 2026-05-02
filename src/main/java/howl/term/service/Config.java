@@ -24,7 +24,7 @@ public final class Config {
 
     public static Config load(android.content.Context context) {
         final android.content.SharedPreferences prefs =
-                android.preference.PreferenceManager.getDefaultSharedPreferences(context);
+                context.getSharedPreferences("howl.term.config", android.content.Context.MODE_PRIVATE);
         final String shell = normalize(prefs.getString("term.shell", null));
         final String startPath = normalize(prefs.getString("term.start_path", null));
         final String command = normalize(prefs.getString("term.command", null));

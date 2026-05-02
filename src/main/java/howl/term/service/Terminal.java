@@ -47,25 +47,45 @@ public final class Terminal {
     public void configure(String shellPath, String commandText) {
         this.shell = shellPath;
         this.command = commandText;
+        android.util.Log.i(TAG, "terminal.configure shell=" + shellPath + " cmd=" + (commandText != null ? "set" : "null"));
     }
 
     public boolean start() {
         state = State.STARTING;
+        android.util.Log.i(TAG, "terminal.start begin ready=" + READY + " shell=" + shell + " cw=" + cellWidthPx + " ch=" + cellHeightPx);
         if (!READY) {
             state = State.FAILED;
+            android.util.Log.e(TAG, "terminal.start fail: runtime not ready");
             return false;
         }
         if (shell == null || shell.isEmpty()) {
             state = State.FAILED;
+            android.util.Log.e(TAG, "terminal.start fail: shell missing");
             return false;
         }
         handle = Create(shell, command, 60, 40, cellWidthPx, cellHeightPx);
         if (handle == 0L) {
             state = State.FAILED;
+            android.util.Log.e(TAG, "terminal.start fail: native Create returned 0");
             return false;
         }
         state = State.READY;
+        android.util.Log.i(TAG, "terminal.start ok handle=" + handle);
         return true;
+    }
+
+    public int setPrimaryFontPath(String path) {
+        if (handle == 0L) return -1;
+        final int rc = SetPrimaryFontPath(handle, path);
+        android.util.Log.i(TAG, "terminal.setPrimaryFontPath rc=" + rc + " path=" + path);
+        return rc;
+    }
+
+    public int setFallbackFontPaths(String[] paths) {
+        if (handle == 0L) return -1;
+        final int rc = SetFallbackFontPaths(handle, paths);
+        android.util.Log.i(TAG, "terminal.setFallbackFontPaths rc=" + rc + " count=" + (paths != null ? paths.length : 0));
+        return rc;
     }
 
     public void stop() {
@@ -82,13 +102,18 @@ public final class Terminal {
     public int renderFrameSized(int renderWidth, int renderHeight, int gridWidth, int gridHeight, int texture) {
         if (handle == 0L) return -1;
         final int rc = RenderFrameSized(handle, renderWidth, renderHeight, gridWidth, gridHeight, texture);
-        if (rc < 0) state = State.FAILED;
+        if (rc < 0) {
+            state = State.FAILED;
+            android.util.Log.e(TAG, "terminal.renderFrameSized rc=" + rc + " rw=" + renderWidth + " rh=" + renderHeight + " gw=" + gridWidth + " gh=" + gridHeight + " tex=" + texture);
+        }
         return rc;
     }
 
     public int presentAck() {
         if (handle == 0L) return -1;
-        return PresentAck(handle);
+        final int rc = PresentAck(handle);
+        if (rc < 0) android.util.Log.e(TAG, "terminal.presentAck rc=" + rc);
+        return rc;
     }
 
     public int waitRenderWake(int timeoutMs) {
@@ -106,5 +131,7 @@ public final class Terminal {
     private static native int PublishInputBytes(long handle, byte[] data);
     private static native int PresentAck(long handle);
     private static native int WaitRenderWake(long handle, int timeoutMs);
+    private static native int SetPrimaryFontPath(long handle, String path);
+    private static native int SetFallbackFontPaths(long handle, String[] paths);
     private static native int BindNativeMethods(Class<?> cls);
 }

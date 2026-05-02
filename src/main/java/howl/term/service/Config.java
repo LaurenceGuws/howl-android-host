@@ -1,6 +1,6 @@
 package howl.term.service;
 
-/** Host config layer (persistent preferences only). */
+/** Persistent host config (no runtime instance state). */
 public final class Config {
     public static final class Term {
         public final String shell;
@@ -32,9 +32,9 @@ public final class Config {
         return new Config(new Term(shell, startPath, command, fontSizeSp));
     }
 
-    private static String normalize(String s) {
-        if (s == null) return null;
-        final String t = s.trim();
-        return t.isEmpty() ? null : t;
+    private static String normalize(String value) {
+        if (value == null) return null;
+        final String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

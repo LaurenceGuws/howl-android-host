@@ -1,310 +1,191 @@
 package howl.term.widget;
 
+import howl.term.service.Config;
 import howl.term.service.Gpu;
 import howl.term.service.Terminal;
 import howl.term.service.Userland;
-import howl.term.service.Config;
 
-/** Starts GPU runtime */
+/** Terminal widget runtime object. */
 public final class TermInstance {
     private static final String TAG = "howl.term.runtime";
+
     private final Gpu gpu;
     private final Gpu.State gpuState;
     private final Terminal term;
     private final Userland userland;
     private final Config cfg;
-    private volatile int pendingRenderWidth;
-    private volatile int pendingRenderHeight;
-    private volatile int pendingGridWidth;
-    private volatile int pendingGridHeight;
-    private volatile boolean pendingResize;
-    private volatile android.view.View surfaceView;
-    private int texture;
-    private boolean termStarted;
-    private boolean stopRequested;
-    private volatile boolean surfaceReady;
-    private volatile boolean wakeThreadRunning;
-    private Thread wakeThread;
     private final java.util.concurrent.atomic.AtomicBoolean renderQueued;
 
+    private volatile int renderW;
+    private volatile int renderH;
+    private volatile int gridW;
+    private volatile int gridH;
+    private volatile android.view.View surfaceView;
+    private volatile boolean surfaceReady;
+    private volatile boolean running;
+
+    private int texture;
+    private Thread wakeThread;
+
     public TermInstance(Userland userland, Config cfg) {
+        if (userland == null) throw new IllegalArgumentException("userland required");
+        if (cfg == null) throw new IllegalArgumentException("config required");
         this.gpu = new Gpu();
         this.gpuState = new Gpu.State();
-        if (userland == null) {
-            throw new IllegalArgumentException("userland runtime required");
-        }
-        if (cfg == null) {
-            throw new IllegalArgumentException("host config required");
-        }
+        this.term = new Terminal();
         this.userland = userland;
         this.cfg = cfg;
-        this.term = new Terminal();
-        this.pendingRenderWidth = 0;
-        this.pendingRenderHeight = 0;
-        this.pendingGridWidth = 0;
-        this.pendingGridHeight = 0;
-        this.pendingResize = false;
-        this.surfaceView = null;
-        this.texture = 0;
-        this.termStarted = false;
-        this.stopRequested = false;
-        this.surfaceReady = false;
-        this.wakeThreadRunning = false;
-        this.wakeThread = null;
         this.renderQueued = new java.util.concurrent.atomic.AtomicBoolean(false);
+        this.renderW = 1;
+        this.renderH = 1;
+        this.gridW = 1;
+        this.gridH = 1;
+        this.surfaceReady = false;
+        this.running = false;
+        this.texture = 0;
+        this.wakeThread = null;
     }
 
     public android.view.View view(android.app.Activity activity) {
-        final android.util.DisplayMetrics dm = activity.getResources().getDisplayMetrics();
-        final int fontPx = Math.max(8, Math.round(cfg.term.fontSizeSp * dm.density));
-        final int cellWidthPx = Math.max(4, fontPx / 2);
-        final int cellHeightPx = fontPx;
-        term.configureCellSizePx(cellWidthPx, cellHeightPx);
-        final android.view.View[] viewRef = new android.view.View[1];
-        final android.view.View view = gpu.surface(activity, gpuState, new Gpu.FrameHooks() {
+        final int fontPx = Math.max(8, Math.round(cfg.term.fontSizeSp * activity.getResources().getDisplayMetrics().density));
+        final int cellW = Math.max(4, fontPx / 2);
+        final int cellH = fontPx;
+        term.setCellSizePx(cellW, cellH);
+
+        final android.view.View[] ref = new android.view.View[1];
+        final android.view.View view = gpu.createSurface(activity, gpuState, new Gpu.Hooks() {
             @Override
             public void onSurfaceCreated() {
-                stopRequested = false;
-                surfaceReady = false;
                 texture = gpu.texture(gpuState);
+                gpu.markFrameReady(gpuState, false);
                 final boolean userlandReady = userland.waitUntilReady(4000);
                 String shell = cfg.term.shell != null ? cfg.term.shell : userland.getShell();
-                String command = cfg.term.command != null ? cfg.term.command : userland.buildShellCommand();
-                if (!userlandReady) {
+                String command = cfg.term.command;
+                if (command == null && cfg.term.startPath != null) {
+                    command = "cd \"" + cfg.term.startPath + "\" && exec \"" + shell + "\" -i";
+                }
+                if (!userlandReady || shell == null || !new java.io.File(shell).isFile()) {
                     android.util.Log.e(TAG, "userland not ready; using fallback shell");
                     shell = "/system/bin/sh";
                     command = null;
                 }
-                if (!term.configurePty(shell, command)) {
-                    android.util.Log.e(TAG, "terminal configure failed shell=" + shell);
-                    termStarted = false;
-                    return;
-                }
-                termStarted = term.start();
-                if (!termStarted) {
-                    android.util.Log.e(TAG, "terminal start failed shell=" + shell);
-                } else {
+                term.configure(shell != null ? shell : "/system/bin/sh", command);
+                running = term.start();
+                if (running) {
                     startWakeThread();
+                } else {
+                    android.util.Log.e(TAG, "terminal start failed shell=" + shell);
                 }
-                if (viewRef[0] != null) viewRef[0].requestFocus();
-                requestRenderCoalesced(viewRef[0]);
+                requestRender(ref[0]);
             }
 
             @Override
             public void onSurfaceChanged(int width, int height) {
-                gpu.ensureTextureSize(gpuState, width, height);
-                scheduleRenderResize(width, height);
+                renderW = Math.max(1, width);
+                renderH = Math.max(1, height);
+                gridW = renderW;
+                gridH = renderH;
+                gpu.ensureTextureSize(gpuState, renderW, renderH);
+                gpu.markFrameReady(gpuState, false);
                 surfaceReady = true;
-                requestRenderCoalesced(viewRef[0]);
+                requestRender(ref[0]);
             }
 
             @Override
             public void onDrawFrame() {
                 renderQueued.set(false);
-                if (stopRequested && termStarted) {
-                    stop();
-                    return;
-                }
-                if (!termStarted) {
-                    return;
-                }
-                if (!surfaceReady) {
-                    return;
-                }
-                final int renderWidth = Math.max(1, pendingRenderWidth);
-                final int renderHeight = Math.max(1, pendingRenderHeight);
-                final int gridWidth = Math.max(1, pendingGridWidth > 0 ? pendingGridWidth : pendingRenderWidth);
-                final int gridHeight = Math.max(1, pendingGridHeight > 0 ? pendingGridHeight : pendingRenderHeight);
-                final boolean hadResize = pendingResize;
-                if (hadResize) pendingResize = false;
-
-                final int rc = term.renderFrameSized(
-                        renderWidth,
-                        renderHeight,
-                        gridWidth,
-                        gridHeight,
-                        texture
-                );
+                if (!running || !surfaceReady) return;
+                final int rc = term.renderFrameSized(renderW, renderH, gridW, gridH, texture);
                 if (rc < 0) {
+                    gpu.markFrameReady(gpuState, false);
+                    android.util.Log.e(TAG, "renderFrameSized failed rc=" + rc + " state=" + term.state());
                     return;
                 }
-                final int ackRc = term.presentAck();
-                if (ackRc < 0) {
+                final int ack = term.presentAck();
+                if (ack < 0) {
+                    gpu.markFrameReady(gpuState, false);
+                    android.util.Log.e(TAG, "presentAck failed rc=" + ack);
                     return;
                 }
+                gpu.markFrameReady(gpuState, true);
             }
 
             @Override
             public void onSurfaceDestroyed() {
-                stopRequested = true;
                 stop();
             }
 
             @Override
             public void onInputBytes(byte[] bytes) {
-                if (bytes == null || bytes.length == 0 || !termStarted) return;
-                final int rc = term.publishInputBytes(bytes);
-                if (rc < 0) {
-                    return;
-                }
-                requestRenderCoalesced(viewRef[0]);
+                if (!running || bytes == null || bytes.length == 0) return;
+                if (term.publishInputBytes(bytes) >= 0) requestRender(ref[0]);
             }
         });
+
+        view.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) -> {
+            final int w = r - l;
+            final int h = b - t;
+            if (w == (orr - ol) && h == (ob - ot)) return;
+            renderW = Math.max(1, w);
+            renderH = Math.max(1, h);
+            gridW = renderW;
+            gridH = renderH;
+            gpu.resizeTexture(gpuState, v, renderW, renderH);
+            requestRender(v);
+        });
+
         view.setFocusable(true);
         view.setFocusableInTouchMode(true);
-        view.setClickable(true);
-        view.setOnKeyListener((v, keyCode, event) -> {
-            if (!termStarted) return false;
-            if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) return false;
-            byte[] bytes = mapKeyEvent(event);
-            if (bytes == null) {
-                final int codepoint = event.getUnicodeChar();
-                if (codepoint > 0 && !Character.isISOControl(codepoint)) {
-                    final String s = new String(Character.toChars(codepoint));
-                    bytes = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                }
-            }
-            if (bytes == null || bytes.length == 0) return false;
-            final int rc = term.publishInputBytes(bytes);
-            if (rc < 0) {
-                return false;
-            }
-            requestRenderCoalesced(v);
-            return true;
-        });
-        view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-            final int width = right - left;
-            final int height = bottom - top;
-            if (width != oldRight - oldLeft || height != oldBottom - oldTop) {
-                scheduleRenderResize(width, height);
-                scheduleGridResize(width, height);
-                gpu.resizeTexture(gpuState, v, width, height);
-                requestRenderCoalesced(v);
-            }
-        });
-        viewRef[0] = view;
-        surfaceView = view;
-        view.requestFocus();
+        ref[0] = view;
+        this.surfaceView = view;
         return view;
     }
 
-    private static byte[] mapKeyEvent(android.view.KeyEvent event) {
-        final int keyCode = event.getKeyCode();
-        final boolean ctrl = event.isCtrlPressed();
-        final boolean alt = event.isAltPressed();
-        if (keyCode == android.view.KeyEvent.KEYCODE_ENTER || keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER) return new byte[] { '\r' };
-        if (keyCode == android.view.KeyEvent.KEYCODE_DEL) return new byte[] { 0x7f };
-        if (keyCode == android.view.KeyEvent.KEYCODE_TAB) return new byte[] { '\t' };
-        if (keyCode == android.view.KeyEvent.KEYCODE_ESCAPE) return new byte[] { 0x1b };
-        if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP) return "\u001b[A".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) return "\u001b[B".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) return "\u001b[C".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT) return "\u001b[D".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_MOVE_HOME) return "\u001b[H".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_MOVE_END) return "\u001b[F".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_PAGE_UP) return "\u001b[5~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_PAGE_DOWN) return "\u001b[6~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_FORWARD_DEL) return "\u001b[3~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_INSERT) return "\u001b[2~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F1) return "\u001bOP".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F2) return "\u001bOQ".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F3) return "\u001bOR".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F4) return "\u001bOS".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F5) return "\u001b[15~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F6) return "\u001b[17~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F7) return "\u001b[18~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F8) return "\u001b[19~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F9) return "\u001b[20~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F10) return "\u001b[21~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F11) return "\u001b[23~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (keyCode == android.view.KeyEvent.KEYCODE_F12) return "\u001b[24~".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        if (ctrl) {
-            final int cp = event.getUnicodeChar(android.view.KeyEvent.META_CTRL_ON);
-            if (cp > 0 && cp <= 0x1f) return new byte[] { (byte) cp };
-        }
-        if (alt) {
-            final int cp = event.getUnicodeChar();
-            if (cp > 0 && !Character.isISOControl(cp)) {
-                final byte[] b = new String(Character.toChars(cp)).getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                final byte[] out = new byte[b.length + 1];
-                out[0] = 0x1b;
-                System.arraycopy(b, 0, out, 1, b.length);
-                return out;
-            }
-        }
-        return null;
-    }
-
     public void onPause() {
-        final android.view.View v = surfaceView;
-        if (v instanceof android.opengl.GLSurfaceView glView) {
-            glView.onPause();
-        }
+        final android.view.View view = surfaceView;
+        if (view instanceof android.opengl.GLSurfaceView gl) gl.onPause();
     }
 
     public void onResume() {
-        final android.view.View v = surfaceView;
-        if (v instanceof android.opengl.GLSurfaceView glView) {
-            glView.onResume();
-            requestRenderCoalesced(glView);
+        final android.view.View view = surfaceView;
+        if (view instanceof android.opengl.GLSurfaceView gl) {
+            gl.onResume();
+            requestRender(gl);
         }
-    }
-
-    private void scheduleRenderResize(int width, int height) {
-        pendingRenderWidth = width;
-        pendingRenderHeight = height;
-        if (pendingGridWidth <= 0 || pendingGridHeight <= 0) {
-            pendingGridWidth = width;
-            pendingGridHeight = height;
-        }
-        pendingResize = true;
-    }
-
-    private void scheduleGridResize(int width, int height) {
-        pendingGridWidth = width;
-        pendingGridHeight = height;
-        pendingResize = true;
     }
 
     private synchronized void stop() {
-        if (!termStarted) {
-            return;
-        }
-        wakeThreadRunning = false;
+        running = false;
+        surfaceReady = false;
         final Thread t = wakeThread;
+        wakeThread = null;
         if (t != null) {
             t.interrupt();
             try {
                 t.join(200);
-            } catch (InterruptedException ignored) {}
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
         }
-        wakeThread = null;
         term.stop();
-        termStarted = false;
-        stopRequested = false;
-        surfaceReady = false;
-        texture = 0;
     }
 
     private synchronized void startWakeThread() {
-        if (wakeThreadRunning) return;
-        wakeThreadRunning = true;
+        if (wakeThread != null) return;
         wakeThread = new Thread(() -> {
-            while (wakeThreadRunning && termStarted && !stopRequested) {
+            while (running) {
                 final int rc = term.waitRenderWake(16);
-                if (!wakeThreadRunning || !termStarted || stopRequested) break;
+                if (!running) break;
                 if (rc < 0) break;
-                if (rc > 0) {
-                    requestRenderCoalesced(surfaceView);
-                }
+                if (rc > 0) requestRender(surfaceView);
             }
         }, "howl-term-wake");
         wakeThread.start();
     }
 
-    private void requestRenderCoalesced(android.view.View v) {
-        if (v == null) return;
+    private void requestRender(android.view.View view) {
+        if (view == null) return;
         if (!renderQueued.compareAndSet(false, true)) return;
-        v.post(() -> gpu.requestRender(v));
+        view.post(() -> gpu.requestRender(view));
     }
 }

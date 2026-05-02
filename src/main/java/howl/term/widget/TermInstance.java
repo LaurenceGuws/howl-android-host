@@ -35,6 +35,11 @@ public final class TermInstance {
     private long lastFrameLogMs;
     private long lastWakeLogMs;
     private final java.util.concurrent.atomic.AtomicLong lastInputMs;
+    private android.widget.OverScroller scrollFlingScroller;
+    private boolean scrollFlingScheduled;
+    private int scrollFlingLastY;
+    private float scrollRemainderRows;
+    private int cellHeightPx;
 
     public TermInstance(Config cfg, ShellLaunch shellLaunch) {
         if (cfg == null) throw new IllegalArgumentException("config required");
@@ -57,12 +62,19 @@ public final class TermInstance {
         this.lastFrameLogMs = 0L;
         this.lastWakeLogMs = 0L;
         this.lastInputMs = new java.util.concurrent.atomic.AtomicLong(0L);
+        this.scrollFlingScroller = null;
+        this.scrollFlingScheduled = false;
+        this.scrollFlingLastY = 0;
+        this.scrollRemainderRows = 0f;
+        this.cellHeightPx = 24;
     }
 
     public android.view.View view(android.app.Activity activity) {
         final int fontPx = Math.max(8, Math.round(cfg.term.fontSizeSp * activity.getResources().getDisplayMetrics().density));
         final int cellW = Math.max(4, fontPx / 2);
         final int cellH = fontPx;
+        this.cellHeightPx = cellH;
+        this.scrollFlingScroller = new android.widget.OverScroller(activity);
         term.setCellSizePx(cellW, cellH);
 
         final android.view.View[] ref = new android.view.View[1];
@@ -166,18 +178,47 @@ public final class TermInstance {
             }
         });
 
-        gl.setOnTouchListener((v, e) -> {
-            if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
-                focusInput();
-                final android.view.inputmethod.InputMethodManager imm =
-                        (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
-                if (imm != null) {
-                    imm.restartInput(shellInputView);
-                    imm.showSoftInput(shellInputView, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-                }
-            }
-            return false;
-        });
+        final android.view.GestureDetector gestureDetector = new android.view.GestureDetector(activity,
+                new android.view.GestureDetector.SimpleOnGestureListener() {
+                    @Override
+                    public boolean onDown(android.view.MotionEvent e) {
+                        stopScrollFling();
+                        scrollRemainderRows = 0f;
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onSingleTapConfirmed(android.view.MotionEvent e) {
+                        focusInput();
+                        final android.view.inputmethod.InputMethodManager imm =
+                                (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+                        if (imm != null) {
+                            imm.restartInput(shellInputView);
+                            imm.showSoftInput(shellInputView, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+                        }
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onScroll(android.view.MotionEvent e1, android.view.MotionEvent e2, float distanceX, float distanceY) {
+                        applyScrollDelta(distanceY);
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onFling(android.view.MotionEvent e1, android.view.MotionEvent e2, float velocityX, float velocityY) {
+                        if (!running) return false;
+                        if (cellHeightPx <= 0) return false;
+                        final android.widget.OverScroller scroller = scrollFlingScroller;
+                        if (scroller == null) return false;
+                        stopScrollFling();
+                        scrollFlingLastY = 0;
+                        scroller.fling(0, 0, 0, Math.round(velocityY), 0, 0, Integer.MIN_VALUE / 4, Integer.MAX_VALUE / 4);
+                        scheduleScrollFlingFrame();
+                        return true;
+                    }
+                });
+        gl.setOnTouchListener((v, e) -> gestureDetector.onTouchEvent(e));
 
         final android.widget.FrameLayout container = new android.widget.FrameLayout(activity);
         container.addView(gl, new android.widget.FrameLayout.LayoutParams(
@@ -258,6 +299,7 @@ public final class TermInstance {
         term.stop();
         glView = null;
         inputView = null;
+        stopScrollFling();
     }
 
     private synchronized void startWakeThread() {
@@ -292,6 +334,57 @@ public final class TermInstance {
             return;
         }
         view.post(() -> gpu.requestRender(view));
+    }
+
+    private void applyScrollDelta(float deltaY) {
+        if (!running) return;
+        final int h = Math.max(1, renderH);
+        final int rowPx = Math.max(1, cellHeightPx);
+        final int visibleRows = Math.max(1, h / rowPx);
+        final float exactRowPx = Math.max(1f, (float) h / (float) visibleRows);
+        scrollRemainderRows += (deltaY / exactRowPx);
+        final int wholeRows = (int) scrollRemainderRows;
+        if (wholeRows == 0) return;
+        scrollRemainderRows -= wholeRows;
+
+        final int historyCount = term.currentScrollbackCount();
+        final int currentOffset = term.currentScrollbackOffset();
+        final int nextOffset = Math.max(0, Math.min(currentOffset + wholeRows, historyCount));
+        if (nextOffset == currentOffset) return;
+        if (nextOffset == 0) {
+            term.followLiveBottom();
+        } else {
+            term.setScrollbackOffset(nextOffset);
+        }
+        requestRender(glView);
+    }
+
+    private void scheduleScrollFlingFrame() {
+        if (scrollFlingScheduled) return;
+        scrollFlingScheduled = true;
+        android.view.Choreographer.getInstance().postFrameCallback(frameTimeNanos -> {
+            scrollFlingScheduled = false;
+            final android.widget.OverScroller scroller = scrollFlingScroller;
+            if (scroller == null) return;
+            if (!scroller.computeScrollOffset()) return;
+            final int currY = scroller.getCurrY();
+            final float deltaY = currY - scrollFlingLastY;
+            scrollFlingLastY = currY;
+            applyScrollDelta(deltaY);
+            if (!scroller.isFinished()) {
+                scheduleScrollFlingFrame();
+            }
+        });
+    }
+
+    private void stopScrollFling() {
+        final android.widget.OverScroller scroller = scrollFlingScroller;
+        if (scroller != null && !scroller.isFinished()) {
+            scroller.forceFinished(true);
+        }
+        scrollFlingScheduled = false;
+        scrollFlingLastY = 0;
+        scrollRemainderRows = 0f;
     }
 
     private static String pickSystemMonoFont() {

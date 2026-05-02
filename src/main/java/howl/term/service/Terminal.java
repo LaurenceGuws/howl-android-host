@@ -149,6 +149,26 @@ public final class Terminal {
         return HasOutputProof(handle) != 0;
     }
 
+    public int currentScrollbackCount() {
+        if (handle == 0L) return 0;
+        return CurrentScrollbackCount(handle);
+    }
+
+    public int currentScrollbackOffset() {
+        if (handle == 0L) return 0;
+        return CurrentScrollbackOffset(handle);
+    }
+
+    public int setScrollbackOffset(int offsetRows) {
+        if (handle == 0L) return -1;
+        return SetScrollbackOffset(handle, Math.max(0, offsetRows));
+    }
+
+    public int followLiveBottom() {
+        if (handle == 0L) return -1;
+        return FollowLiveBottom(handle);
+    }
+
     public boolean isAlive() {
         if (handle == 0L) return false;
         return IsSessionAlive(handle) != 0;
@@ -190,6 +210,10 @@ public final class Terminal {
     private static native long RenderShapedClusters(long handle);
     private static native int RenderResolveStage(long handle);
     private static native int HasOutputProof(long handle);
+    private static native int CurrentScrollbackCount(long handle);
+    private static native int CurrentScrollbackOffset(long handle);
+    private static native int SetScrollbackOffset(long handle, int offsetRows);
+    private static native int FollowLiveBottom(long handle);
     private static native int IsSessionAlive(long handle);
     private static native int BindNativeMethods(Class<?> cls);
 }

@@ -18,6 +18,7 @@ public final class TermInstance {
     private final Config cfg;
     private final ShellLaunch shellLaunch;
     private final java.util.concurrent.atomic.AtomicBoolean renderQueued;
+    private final java.util.concurrent.atomic.AtomicBoolean renderPending;
 
     private volatile int renderW;
     private volatile int renderH;
@@ -32,6 +33,8 @@ public final class TermInstance {
     private int texture;
     private Thread wakeThread;
     private long lastFrameLogMs;
+    private long lastWakeLogMs;
+    private final java.util.concurrent.atomic.AtomicLong lastInputMs;
 
     public TermInstance(Config cfg, ShellLaunch shellLaunch) {
         if (cfg == null) throw new IllegalArgumentException("config required");
@@ -42,6 +45,7 @@ public final class TermInstance {
         this.cfg = cfg;
         this.shellLaunch = shellLaunch;
         this.renderQueued = new java.util.concurrent.atomic.AtomicBoolean(false);
+        this.renderPending = new java.util.concurrent.atomic.AtomicBoolean(false);
         this.renderW = 1;
         this.renderH = 1;
         this.gridW = 1;
@@ -51,6 +55,8 @@ public final class TermInstance {
         this.texture = 0;
         this.wakeThread = null;
         this.lastFrameLogMs = 0L;
+        this.lastWakeLogMs = 0L;
+        this.lastInputMs = new java.util.concurrent.atomic.AtomicLong(0L);
     }
 
     public android.view.View view(android.app.Activity activity) {
@@ -104,6 +110,7 @@ public final class TermInstance {
             @Override
             public void onDrawFrame() {
                 renderQueued.set(false);
+                final boolean needsFollowup = renderPending.getAndSet(false);
                 if (!running || !surfaceReady) return;
                 if (!term.isAlive()) {
                     android.util.Log.e(TAG, "term session died before draw");
@@ -124,9 +131,14 @@ public final class TermInstance {
                 }
                 gpu.markFrameReady(gpuState, true);
                 final long now = android.os.SystemClock.uptimeMillis();
+                final long inputAt = lastInputMs.get();
                 if (now - lastFrameLogMs > 1000) {
                     lastFrameLogMs = now;
-                    android.util.Log.i(TAG, "termInst.frame ok rw=" + renderW + " rh=" + renderH + " tex=" + texture);
+                    final long inputToFrameMs = (inputAt > 0L && inputAt <= now) ? (now - inputAt) : -1L;
+                    android.util.Log.i(TAG, "termInst.frame ok rw=" + renderW + " rh=" + renderH + " tex=" + texture + " inputToFrameMs=" + inputToFrameMs + " queued=" + renderQueued.get());
+                }
+                if (needsFollowup) {
+                    requestRender(glView);
                 }
             }
 
@@ -142,6 +154,7 @@ public final class TermInstance {
                 if (text == null || text.isEmpty()) return;
                 final byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
                 if (running) {
+                    lastInputMs.set(android.os.SystemClock.uptimeMillis());
                     final int rc = term.publishInputBytes(bytes);
                     if (rc >= 0) requestRender(ref[0]);
                 }
@@ -234,10 +247,12 @@ public final class TermInstance {
         wakeThread = null;
         if (t != null) {
             t.interrupt();
-            try {
-                t.join(200);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
+            if (Thread.currentThread() != t) {
+                try {
+                    t.join(200);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
         term.stop();
@@ -258,6 +273,11 @@ public final class TermInstance {
                 if (!running) break;
                 if (rc < 0) break;
                 if (rc > 0) {
+                    final long now = android.os.SystemClock.uptimeMillis();
+                    if (now - lastWakeLogMs > 1000) {
+                        lastWakeLogMs = now;
+                        android.util.Log.i(TAG, "termInst.wake rc=" + rc + " queued=" + renderQueued.get());
+                    }
                     requestRender(glView);
                 }
             }
@@ -267,7 +287,10 @@ public final class TermInstance {
 
     private void requestRender(android.view.View view) {
         if (view == null) return;
-        if (!renderQueued.compareAndSet(false, true)) return;
+        if (!renderQueued.compareAndSet(false, true)) {
+            renderPending.set(true);
+            return;
+        }
         view.post(() -> gpu.requestRender(view));
     }
 

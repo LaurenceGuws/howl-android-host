@@ -1,17 +1,19 @@
-package howl.term.service;
+package howl.term.userland;
 
-/** Userland maintenance workflow lane: install/repair only. */
-public final class UserlandWorkflowController {
+import howl.term.userland.Runtime;
+
+/** Runs the userland repair lane and posts lifecycle callbacks on the main thread. */
+public final class RepairWorkflow {
     public interface Listener {
         void onStarted();
         void onFinished(boolean ok);
     }
 
-    private final Userland userland;
+    private final Runtime userland;
     private final android.os.Handler mainHandler;
     private Thread worker;
 
-    public UserlandWorkflowController(Userland userland) {
+    public RepairWorkflow(Runtime userland) {
         if (userland == null) throw new IllegalArgumentException("userland required");
         this.userland = userland;
         this.mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -21,7 +23,7 @@ public final class UserlandWorkflowController {
         return worker != null && worker.isAlive();
     }
 
-    public synchronized void startRepair(Listener listener) {
+    public synchronized void start(Listener listener) {
         if (isRunning()) return;
         if (listener != null) {
             mainHandler.post(listener::onStarted);

@@ -1,6 +1,8 @@
-package howl.term.service;
+package howl.term.userland;
 
+import howl.term.Config;
 import howl.term.R;
+import howl.term.ShellLaunch;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -11,8 +13,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
-/** Android host userland runtime skeleton. */
-public final class Userland {
+/** Userland runtime leaf: lifecycle, repair, and install plumbing. */
+public final class Runtime {
     private static final String TAG = "howl.term.runtime";
     private final String prefix;
     private final String home;
@@ -26,7 +28,7 @@ public final class Userland {
     private volatile boolean failed;
     private final Object stateLock;
 
-    public Userland(android.content.Context context) {
+    public Runtime(android.content.Context context) {
         final String appRoot = context.getString(R.string.userland_app_root, context.getPackageName());
         this.prefix = appRoot + context.getString(R.string.userland_prefix_suffix);
         this.home = appRoot + context.getString(R.string.userland_home_suffix);
@@ -73,22 +75,6 @@ public final class Userland {
             return "cd -- \"" + escapeDoubleQuoted(useStart) + "\" && " + commandText;
         }
         return "cd -- \"" + escapeDoubleQuoted(useStart) + "\" && exec \"" + escapeDoubleQuoted(useShell) + "\" -il";
-    }
-
-    public ShellLaunch resolveLaunch(Config cfg, long timeoutMs) {
-        final boolean readyNow = waitUntilReady(timeoutMs);
-        String shellPath = cfg.term.shell != null ? cfg.term.shell : getShell();
-        String startPath = cfg.term.startPath != null ? cfg.term.startPath : getHome();
-        String commandText = null;
-        final boolean explicitCommand = cfg.term.command != null && !cfg.term.command.trim().isEmpty();
-        final boolean explicitStartPath = cfg.term.startPath != null
-                && !cfg.term.startPath.trim().isEmpty()
-                && !cfg.term.startPath.trim().equals(getHome());
-        if (explicitCommand || explicitStartPath) {
-            commandText = buildLoginCommand(shellPath, startPath, cfg.term.command);
-        }
-        if (!readyNow || shellPath == null || !new File(shellPath).isFile()) commandText = null;
-        return new ShellLaunch(shellPath, commandText);
     }
 
     public boolean waitUntilReady(long timeoutMs) {

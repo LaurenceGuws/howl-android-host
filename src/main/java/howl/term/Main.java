@@ -1,13 +1,5 @@
 package howl.term;
 
-import howl.term.input.HardwareKeyboardController;
-import howl.term.service.Config;
-import howl.term.service.Input;
-import howl.term.service.ShellLaunch;
-import howl.term.service.Userland;
-import howl.term.service.UserlandManager;
-import howl.term.service.UserlandWorkflowController;
-import howl.term.service.Window;
 import howl.term.widget.AssistBar;
 import howl.term.widget.SidePanel;
 import howl.term.widget.TermInstance;
@@ -17,10 +9,7 @@ public final class Main extends android.app.Activity {
     private final Window window = new Window();
 
     private Userland userland;
-    private UserlandManager userlandManager;
-    private UserlandWorkflowController workflowController;
     private TermInstance termInstance;
-    private HardwareKeyboardController hardwareKeyboard;
     private AssistBar assistBar;
     private SidePanel sidePanel;
 
@@ -28,11 +17,9 @@ public final class Main extends android.app.Activity {
     protected void onCreate(android.os.Bundle state) {
         super.onCreate(state);
         userland = new Userland(this);
-        userlandManager = new UserlandManager(userland);
-        workflowController = new UserlandWorkflowController(userland);
-        userlandManager.start();
+        userland.start();
         final Config cfg = Config.load(this);
-        final UserlandManager.LaunchPlan launchPlan = userlandManager.resolveLaunch(cfg, 12000);
+        final Userland.Launch launchPlan = userland.resolveLaunch(cfg, 12000);
         if (!launchPlan.userlandReady || launchPlan.shellLaunch.shell == null || !new java.io.File(launchPlan.shellLaunch.shell).isFile()) {
             showUserlandRecovery(cfg);
             return;
@@ -70,7 +57,7 @@ public final class Main extends android.app.Activity {
         status.setTextSize(13f);
         status.setText("Waiting...");
 
-        retry.setOnClickListener(v -> workflowController.startRepair(new UserlandWorkflowController.Listener() {
+        retry.setOnClickListener(v -> userland.startRepair(new Userland.RepairListener() {
             @Override
             public void onStarted() {
                 retry.setEnabled(false);
@@ -84,7 +71,7 @@ public final class Main extends android.app.Activity {
                     status.setText("Repair failed. Check runtime logs, then retry.");
                     return;
                 }
-                final UserlandManager.LaunchPlan launchPlan = userlandManager.resolveLaunch(cfg, 2000);
+                final Userland.Launch launchPlan = userland.resolveLaunch(cfg, 2000);
                 if (!launchPlan.userlandReady || launchPlan.shellLaunch.shell == null || !new java.io.File(launchPlan.shellLaunch.shell).isFile()) {
                     status.setText("Repair completed, but shell still unavailable.");
                     return;
@@ -127,17 +114,6 @@ public final class Main extends android.app.Activity {
         final android.view.View scrim = window.container(this);
 
         termInstance = new TermInstance(cfg, shellLaunch);
-        hardwareKeyboard = new HardwareKeyboardController(new HardwareKeyboardController.Host() {
-            @Override
-            public howl.term.input.ShellInputView shellInputView() {
-                return termInstance != null ? termInstance.shellInputView() : null;
-            }
-
-            @Override
-            public void focusInput() {
-                if (termInstance != null) termInstance.focusInput();
-            }
-        });
         assistBar = new AssistBar(this, window);
         sidePanel = new SidePanel(this, window);
         final android.view.View termView = termInstance.view(this);
@@ -207,7 +183,7 @@ public final class Main extends android.app.Activity {
 
     @Override
     public boolean dispatchKeyEvent(android.view.KeyEvent event) {
-        if (hardwareKeyboard != null && hardwareKeyboard.handleDispatchKeyEvent(event)) {
+        if (termInstance != null && termInstance.dispatchKeyEvent(event)) {
             return true;
         }
         return super.dispatchKeyEvent(event);

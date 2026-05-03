@@ -1,4 +1,4 @@
-package howl.term.service;
+package howl.term;
 
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;

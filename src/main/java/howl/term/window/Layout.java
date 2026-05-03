@@ -1,9 +1,7 @@
-package howl.term.service;
+package howl.term.window;
 
-/** Android app-window helpers. */
-public final class Window {
-    public Window() {}
-
+/** Layout leaf for FrameLayout-based app composition. */
+public final class Layout {
     public android.widget.FrameLayout root(android.app.Activity activity) {
         return new android.widget.FrameLayout(activity);
     }
@@ -67,33 +65,6 @@ public final class Window {
 
     public void bindTap(android.view.View view, Runnable onTap) {
         view.setOnClickListener(v -> onTap.run());
-    }
-
-    public void toggleIme(android.app.Activity activity, android.view.View anchor) {
-        final android.view.inputmethod.InputMethodManager imm =
-                (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
-        if (imm == null) return;
-        final android.view.View decor = activity.getWindow().getDecorView();
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            final android.view.WindowInsets insets = decor.getRootWindowInsets();
-            final android.view.WindowInsetsController controller = decor.getWindowInsetsController();
-            if (controller == null) return;
-            final boolean visible = insets != null && insets.isVisible(android.view.WindowInsets.Type.ime());
-            if (visible) {
-                controller.hide(android.view.WindowInsets.Type.ime());
-            } else {
-                anchor.requestFocus();
-                controller.show(android.view.WindowInsets.Type.ime());
-            }
-            return;
-        }
-
-        anchor.requestFocus();
-        if (imm.isActive(anchor)) {
-            imm.hideSoftInputFromWindow(decor.getWindowToken(), 0);
-            return;
-        }
-        imm.showSoftInput(anchor, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
     }
 
     private static int dp(android.app.Activity activity, int value) {

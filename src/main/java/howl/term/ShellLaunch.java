@@ -1,4 +1,4 @@
-package howl.term.service;
+package howl.term;
 
 /** App-resolved shell launch contract for one terminal session. */
 public final class ShellLaunch {
@@ -10,4 +10,3 @@ public final class ShellLaunch {
         this.command = command;
     }
 }
-

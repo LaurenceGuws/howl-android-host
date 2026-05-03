@@ -1,10 +1,11 @@
 package howl.term.widget;
 
 import howl.term.input.ShellInputView;
-import howl.term.service.Config;
-import howl.term.service.Gpu;
-import howl.term.service.ShellLaunch;
-import howl.term.service.Terminal;
+import howl.term.Config;
+import howl.term.Gpu;
+import howl.term.Input;
+import howl.term.ShellLaunch;
+import howl.term.Terminal;
 
 import java.nio.charset.StandardCharsets;
 
@@ -19,6 +20,7 @@ public final class TermInstance {
     private final ShellLaunch shellLaunch;
     private final java.util.concurrent.atomic.AtomicBoolean renderQueued;
     private final java.util.concurrent.atomic.AtomicBoolean renderPending;
+    private final Input.HardwareKeyboard hardwareKeyboard;
 
     private volatile int renderW;
     private volatile int renderH;
@@ -58,6 +60,22 @@ public final class TermInstance {
         this.shellLaunch = shellLaunch;
         this.renderQueued = new java.util.concurrent.atomic.AtomicBoolean(false);
         this.renderPending = new java.util.concurrent.atomic.AtomicBoolean(false);
+        this.hardwareKeyboard = Input.createHardwareKeyboard(new Input.HardwareKeyboardHost() {
+            @Override
+            public boolean hasHardwareKeyboardTarget() {
+                return inputView != null;
+            }
+
+            @Override
+            public boolean handleHardwareKeyEvent(android.view.KeyEvent event) {
+                return inputView != null && inputView.handleHardwareKeyEvent(event);
+            }
+
+            @Override
+            public void focusInput() {
+                TermInstance.this.focusInput();
+            }
+        });
         this.renderW = 1;
         this.renderH = 1;
         this.gridW = 1;
@@ -339,8 +357,8 @@ public final class TermInstance {
         return inputView != null ? inputView : surfaceView;
     }
 
-    public ShellInputView shellInputView() {
-        return inputView;
+    public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        return hardwareKeyboard.handleDispatchKeyEvent(event);
     }
 
     public void focusInput() {

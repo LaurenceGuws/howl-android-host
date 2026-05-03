@@ -1,6 +1,6 @@
 package howl.term.widget;
 
-import howl.term.service.Window;
+import howl.term.Window;
 
 /** Assist bar widget object. */
 public final class AssistBar {

@@ -1,7 +1,7 @@
 package howl.term.widget;
 
-import howl.term.service.Input;
-import howl.term.service.Window;
+import howl.term.Input;
+import howl.term.Window;
 
 /** Side panel widget object. */
 public final class SidePanel {

@@ -1,31 +1,31 @@
-package howl.term.service;
+package howl.term.userland;
 
-/** App-level userland orchestration: readiness + shell launch resolution. */
-public final class UserlandManager {
+import howl.term.Config;
+import howl.term.ShellLaunch;
+import howl.term.userland.Runtime;
+
+/** Resolves one terminal launch against current userland readiness. */
+public final class LaunchResolver {
     private static final String TAG = "howl.term.runtime";
 
-    public static final class LaunchPlan {
+    public static final class ResolvedLaunch {
         public final ShellLaunch shellLaunch;
         public final boolean userlandReady;
 
-        public LaunchPlan(ShellLaunch shellLaunch, boolean userlandReady) {
+        public ResolvedLaunch(ShellLaunch shellLaunch, boolean userlandReady) {
             this.shellLaunch = shellLaunch;
             this.userlandReady = userlandReady;
         }
     }
 
-    private final Userland userland;
+    private final Runtime userland;
 
-    public UserlandManager(Userland userland) {
+    public LaunchResolver(Runtime userland) {
         if (userland == null) throw new IllegalArgumentException("userland required");
         this.userland = userland;
     }
 
-    public void start() {
-        userland.start();
-    }
-
-    public LaunchPlan resolveLaunch(Config cfg, long timeoutMs) {
+    public ResolvedLaunch resolve(Config cfg, long timeoutMs) {
         final boolean ready = userland.waitUntilReady(timeoutMs);
         String shell = cfg.term.shell != null ? cfg.term.shell : userland.getShell();
         String startPath = cfg.term.startPath != null ? cfg.term.startPath : userland.getHome();
@@ -47,6 +47,6 @@ public final class UserlandManager {
                         " launchable=" + launchable +
                         " shell=" + shell +
                         " command=" + (command != null ? "set" : "null"));
-        return new LaunchPlan(new ShellLaunch(shell, command), ready);
+        return new ResolvedLaunch(new ShellLaunch(shell, command), ready);
     }
 }

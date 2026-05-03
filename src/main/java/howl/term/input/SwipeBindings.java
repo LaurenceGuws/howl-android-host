@@ -1,8 +1,8 @@
-package howl.term.service;
+package howl.term.input;
 
-/** Input helpers for gestures and key->byte translation. */
-public final class Input {
-    public Input() {}
+/** Gesture leaf for simple swipe-driven bindings. */
+public final class SwipeBindings {
+    private SwipeBindings() {}
 
     public static void bindSwipeUp(android.view.View view, Runnable onSwipe) {
         final float[] downY = new float[] {0f};

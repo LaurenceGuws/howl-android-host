@@ -1,4 +1,4 @@
-package howl.term.service;
+package howl.term;
 
 /** Persistent host config (no runtime instance state). */
 public final class Config {
@@ -32,7 +32,7 @@ public final class Config {
         return new Config(new Term(shell, startPath, command, fontSizeSp));
     }
 
-    private static String normalize(String value) {
+    static String normalize(String value) {
         if (value == null) return null;
         final String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;

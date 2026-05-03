@@ -1,8 +1,8 @@
 package howl.term.input;
 
 /** Gesture leaf for simple swipe-driven bindings. */
-public final class SwipeBindings {
-    private SwipeBindings() {}
+public final class SwipeInput {
+    private SwipeInput() {}
 
     public static void bindSwipeUp(android.view.View view, Runnable onSwipe) {
         final float[] downY = new float[] {0f};

@@ -4,13 +4,11 @@ import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 
-import howl.term.Input;
-
 /** Owns hardware-keyboard dispatch policy for terminal input on Android. */
-public final class HardwareKeyboardController {
-    private final Input.HardwareKeyboardHost host;
+public final class HardwareKeyboardDispatch {
+    private final HardwareKeyboard.Host host;
 
-    public HardwareKeyboardController(Input.HardwareKeyboardHost host) {
+    public HardwareKeyboardDispatch(HardwareKeyboard.Host host) {
         this.host = host;
     }
 

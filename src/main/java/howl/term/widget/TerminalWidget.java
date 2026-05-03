@@ -1,16 +1,16 @@
 package howl.term.widget;
 
 import howl.term.input.ShellInputView;
+import howl.term.input.HardwareKeyboard;
 import howl.term.Config;
 import howl.term.Gpu;
-import howl.term.Input;
 import howl.term.ShellLaunch;
 import howl.term.Terminal;
 
 import java.nio.charset.StandardCharsets;
 
 /** Terminal widget runtime object. */
-public final class TermInstance {
+public final class TerminalWidget {
     private static final String TAG = "howl.term.runtime";
 
     private final Gpu gpu;
@@ -20,7 +20,7 @@ public final class TermInstance {
     private final ShellLaunch shellLaunch;
     private final java.util.concurrent.atomic.AtomicBoolean renderQueued;
     private final java.util.concurrent.atomic.AtomicBoolean renderPending;
-    private final Input.HardwareKeyboard hardwareKeyboard;
+    private final HardwareKeyboard hardwareKeyboard;
 
     private volatile int renderW;
     private volatile int renderH;
@@ -50,7 +50,7 @@ public final class TermInstance {
     private int lastOverlayOffset;
     private long lastOverlayRefreshMs;
 
-    public TermInstance(Config cfg, ShellLaunch shellLaunch) {
+    public TerminalWidget(Config cfg, ShellLaunch shellLaunch) {
         if (cfg == null) throw new IllegalArgumentException("config required");
         if (shellLaunch == null) throw new IllegalArgumentException("shellLaunch required");
         this.gpu = new Gpu();
@@ -60,7 +60,7 @@ public final class TermInstance {
         this.shellLaunch = shellLaunch;
         this.renderQueued = new java.util.concurrent.atomic.AtomicBoolean(false);
         this.renderPending = new java.util.concurrent.atomic.AtomicBoolean(false);
-        this.hardwareKeyboard = Input.createHardwareKeyboard(new Input.HardwareKeyboardHost() {
+        this.hardwareKeyboard = new HardwareKeyboard(new HardwareKeyboard.Host() {
             @Override
             public boolean hasHardwareKeyboardTarget() {
                 return inputView != null;
@@ -73,7 +73,7 @@ public final class TermInstance {
 
             @Override
             public void focusInput() {
-                TermInstance.this.focusInput();
+                TerminalWidget.this.focusInput();
             }
         });
         this.renderW = 1;

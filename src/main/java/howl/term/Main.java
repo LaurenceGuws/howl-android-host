@@ -2,14 +2,14 @@ package howl.term;
 
 import howl.term.widget.AssistBar;
 import howl.term.widget.SidePanel;
-import howl.term.widget.TermInstance;
+import howl.term.widget.TerminalWidget;
 
 /** App activity object. */
 public final class Main extends android.app.Activity {
     private final Window window = new Window();
 
     private Userland userland;
-    private TermInstance termInstance;
+    private TerminalWidget terminalWidget;
     private AssistBar assistBar;
     private SidePanel sidePanel;
 
@@ -113,10 +113,10 @@ public final class Main extends android.app.Activity {
         final android.view.View bottomEdge = window.container(this);
         final android.view.View scrim = window.container(this);
 
-        termInstance = new TermInstance(cfg, shellLaunch);
+        terminalWidget = new TerminalWidget(cfg, shellLaunch);
         assistBar = new AssistBar(this, window);
         sidePanel = new SidePanel(this, window);
-        final android.view.View termView = termInstance.view(this);
+        final android.view.View termView = terminalWidget.view(this);
 
         final int assistDp = 66;
         final int assistPx = Math.round(assistDp * getResources().getDisplayMetrics().density);
@@ -141,7 +141,7 @@ public final class Main extends android.app.Activity {
         window.mount(app, bottomEdge, bottomParams);
 
         window.mount(surfaceBox, termView, window.fill());
-        assistBar.setImeAnchor(termInstance.imeAnchor());
+        assistBar.setImeAnchor(terminalWidget.imeAnchor());
 
         window.setBackground(scrim, 0x55000000);
         window.mount(overlay, scrim, window.fill());
@@ -172,18 +172,18 @@ public final class Main extends android.app.Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (termInstance != null) termInstance.onResume();
+        if (terminalWidget != null) terminalWidget.onResume();
     }
 
     @Override
     protected void onPause() {
-        if (termInstance != null) termInstance.onPause();
+        if (terminalWidget != null) terminalWidget.onPause();
         super.onPause();
     }
 
     @Override
     public boolean dispatchKeyEvent(android.view.KeyEvent event) {
-        if (termInstance != null && termInstance.dispatchKeyEvent(event)) {
+        if (terminalWidget != null && terminalWidget.dispatchKeyEvent(event)) {
             return true;
         }
         return super.dispatchKeyEvent(event);

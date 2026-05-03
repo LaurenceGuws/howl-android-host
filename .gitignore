@@ -8,3 +8,5 @@ build
 .kotlin
 
 bin/
+
+src/main/jniLibs/arm64-v8a/libhowl_term.so

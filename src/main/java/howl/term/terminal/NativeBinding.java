@@ -2,7 +2,11 @@ package howl.term.terminal;
 
 import howl.term.Terminal;
 
-/** JNI leaf for terminal native binding and runtime readiness. */
+/**
+ * Responsibility: own the JNI binding surface for the terminal runtime.
+ * Ownership: native library load, binding registration, and raw native shims.
+ * Reason: isolate JNI mechanics behind one boring terminal unit.
+ */
 public final class NativeBinding {
     private static final String TAG = "howl.term.runtime";
     private static final boolean READY;
@@ -20,14 +24,17 @@ public final class NativeBinding {
 
     private NativeBinding() {}
 
+    /** Report whether the native terminal runtime is loaded and bound. */
     public static boolean ready() {
         return READY;
     }
 
+    /** Create one native terminal runtime handle. */
     public static long create(String shell, String command, int cols, int rows, int cellWidth, int cellHeight) {
         return Create(shell, command, cols, rows, cellWidth, cellHeight);
     }
 
+    /** Destroy one native terminal runtime handle. */
     public static void destroy(long handle) { Destroy(handle); }
     public static int renderFrameSized(long handle, int renderWidth, int renderHeight, int gridWidth, int gridHeight, int texture) { return RenderFrameSized(handle, renderWidth, renderHeight, gridWidth, gridHeight, texture); }
     public static int publishInputBytes(long handle, byte[] data) { return PublishInputBytes(handle, data); }

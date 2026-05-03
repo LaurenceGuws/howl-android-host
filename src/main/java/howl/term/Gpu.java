@@ -7,9 +7,14 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** GPU object: surface + texture present. */
+/**
+ * Responsibility: own the public GPU surface for the Android host.
+ * Ownership: GL surface creation, texture management, and present flow.
+ * Reason: keep GL details behind one boring host owner.
+ */
 public final class Gpu {
     private static final String TAG = "howl.term.runtime";
+    /** Mutable GL state carried across surface callbacks. */
     public static final class State {
         public int texture;
         public int program;
@@ -22,6 +27,7 @@ public final class Gpu {
         public boolean frameReady;
         public int drawSkipLogs;
 
+        /** Construct one zeroed GL state holder. */
         public State() {
             texture = 0;
             program = 0;
@@ -36,6 +42,7 @@ public final class Gpu {
         }
     }
 
+    /** Host callback contract for GPU surface lifecycle events. */
     public interface Hooks {
         void onSurfaceCreated();
         void onSurfaceChanged(int width, int height);
@@ -43,6 +50,7 @@ public final class Gpu {
         void onSurfaceDestroyed();
     }
 
+    /** Create the host GL surface and bind lifecycle hooks. */
     public android.view.View createSurface(android.app.Activity activity, State state, Hooks hooks) {
         final GLSurfaceView view = new GLSurfaceView(activity);
         view.setEGLContextClientVersion(2);
@@ -78,10 +86,12 @@ public final class Gpu {
         return view;
     }
 
+    /** Queue one render request on the GL surface if available. */
     public void requestRender(android.view.View v) {
         if (v instanceof GLSurfaceView gl) gl.requestRender();
     }
 
+    /** Queue one texture resize on the GL thread. */
     public void resizeTexture(State state, android.view.View v, int width, int height) {
         if (!(v instanceof GLSurfaceView gl)) return;
         final int w = Math.max(1, width);
@@ -89,8 +99,10 @@ public final class Gpu {
         gl.queueEvent(() -> ensureTextureSize(state, w, h));
     }
 
+    /** Return the current texture handle. */
     public int texture(State state) { return state.texture; }
 
+    /** Ensure the backing texture matches the requested size. */
     public void ensureTextureSize(State state, int width, int height) {
         if (state.texture == 0) return;
         final int w = Math.max(1, width);
@@ -123,6 +135,7 @@ public final class Gpu {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
     }
 
+    /** Mark whether a fresh frame is ready for present. */
     public void markFrameReady(State state, boolean ready) {
         state.frameReady = ready;
     }

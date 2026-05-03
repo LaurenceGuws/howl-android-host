@@ -2,7 +2,11 @@ package howl.term.userland;
 
 import howl.term.userland.Runtime;
 
-/** Runs the userland repair lane and posts lifecycle callbacks on the main thread. */
+/**
+ * Responsibility: own repair workflow orchestration for the Android userland unit.
+ * Ownership: worker-thread repair execution and main-thread callback delivery.
+ * Reason: keep repair flow policy behind one boring userland unit.
+ */
 public final class RepairWorkflow {
     public interface Listener {
         void onStarted();

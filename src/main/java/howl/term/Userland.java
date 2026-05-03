@@ -4,8 +4,13 @@ import howl.term.userland.LaunchResolver;
 import howl.term.userland.RepairWorkflow;
 import howl.term.userland.Runtime;
 
-/** Thin userland owner object. */
+/**
+ * Responsibility: own the public userland surface for the Android host.
+ * Ownership: runtime startup, launch resolution, and repair orchestration.
+ * Reason: keep userland leaves behind one boring host owner.
+ */
 public final class Userland {
+    /** Resolved launch payload for one terminal start attempt. */
     public static final class Launch {
         public final ShellLaunch shellLaunch;
         public final boolean userlandReady;
@@ -16,6 +21,7 @@ public final class Userland {
         }
     }
 
+    /** Host callback contract for repair progress. */
     public interface RepairListener {
         void onStarted();
         void onFinished(boolean ok);
@@ -25,21 +31,25 @@ public final class Userland {
     private final LaunchResolver launchResolver;
     private final RepairWorkflow repairWorkflow;
 
+    /** Construct one userland owner around the Android runtime context. */
     public Userland(android.content.Context context) {
         this.runtime = new Runtime(context);
         this.launchResolver = new LaunchResolver(runtime);
         this.repairWorkflow = new RepairWorkflow(runtime);
     }
 
+    /** Start the userland runtime lane. */
     public void start() {
         runtime.start();
     }
 
+    /** Resolve one terminal launch against current userland readiness. */
     public Launch resolveLaunch(Config config, long timeoutMs) {
         final LaunchResolver.ResolvedLaunch resolved = launchResolver.resolve(config, timeoutMs);
         return new Launch(resolved.shellLaunch, resolved.userlandReady);
     }
 
+    /** Start the repair lane and forward progress callbacks to the host. */
     public void startRepair(RepairListener listener) {
         repairWorkflow.start(listener == null ? null : new RepairWorkflow.Listener() {
             @Override

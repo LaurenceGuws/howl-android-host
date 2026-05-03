@@ -1,7 +1,12 @@
 package howl.term.window;
 
-/** IME leaf for toggling the software keyboard from a host window. */
+/**
+ * Responsibility: own IME toggling for the Android host window unit.
+ * Ownership: software-keyboard visibility checks and show/hide requests.
+ * Reason: keep IME mechanics behind one boring window unit.
+ */
 public final class Ime {
+    /** Toggle the software keyboard against one activity and anchor view. */
     public void toggle(android.app.Activity activity, android.view.View anchor) {
         final android.view.inputmethod.InputMethodManager imm =
                 (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);

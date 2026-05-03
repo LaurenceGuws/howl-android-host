@@ -4,7 +4,11 @@ import howl.term.Config;
 import howl.term.ShellLaunch;
 import howl.term.userland.Runtime;
 
-/** Resolves one terminal launch against current userland readiness. */
+/**
+ * Responsibility: own launch resolution for the Android userland unit.
+ * Ownership: readiness checks and terminal launch synthesis.
+ * Reason: keep launch policy behind one boring userland unit.
+ */
 public final class LaunchResolver {
     private static final String TAG = "howl.term.runtime";
 

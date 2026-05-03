@@ -1,6 +1,10 @@
 package howl.term.terminal;
 
-/** Render telemetry leaf for throttled terminal logging. */
+/**
+ * Responsibility: own throttled render telemetry logging for the Android terminal host.
+ * Ownership: render-counter reset and periodic telemetry emission.
+ * Reason: keep render logging policy behind one boring terminal unit.
+ */
 public final class RenderTelemetry {
     private long lastMissingGlyphs;
     private long lastFallbackHits;
@@ -8,6 +12,7 @@ public final class RenderTelemetry {
     private long lastShapedClusters;
     private int frameCounter;
 
+    /** Reset all telemetry baselines for a fresh terminal session. */
     public void reset() {
         lastMissingGlyphs = 0L;
         lastFallbackHits = 0L;
@@ -16,6 +21,7 @@ public final class RenderTelemetry {
         frameCounter = 0;
     }
 
+    /** Sample and emit render telemetry after one rendered frame. */
     public void onRenderedFrame(long handle) {
         frameCounter += 1;
         if (frameCounter < 30 || handle == 0L) return;

@@ -13,7 +13,11 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
-/** Userland runtime leaf: lifecycle, repair, and install plumbing. */
+/**
+ * Responsibility: own the userland runtime surface for the Android host.
+ * Ownership: readiness tracking, install/repair plumbing, and launch-command synthesis.
+ * Reason: keep userland runtime mechanics behind one boring userland unit.
+ */
 public final class Runtime {
     private static final String TAG = "howl.term.runtime";
     private final String prefix;

@@ -4,7 +4,11 @@ import howl.term.widget.AssistBar;
 import howl.term.widget.SidePanel;
 import howl.term.widget.TerminalWidget;
 
-/** App activity object. */
+/**
+ * Responsibility: own the Android activity boundary for the app shell.
+ * Ownership: userland readiness, top-level layout composition, and lifecycle forwarding.
+ * Reason: keep the application entrypoint on one boring host owner.
+ */
 public final class Main extends android.app.Activity {
     private final Window window = new Window();
 

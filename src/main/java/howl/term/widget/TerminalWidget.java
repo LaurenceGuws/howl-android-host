@@ -9,7 +9,11 @@ import howl.term.Terminal;
 
 import java.nio.charset.StandardCharsets;
 
-/** Terminal widget runtime object. */
+/**
+ * Responsibility: own the terminal widget runtime surface for the Android host.
+ * Ownership: GPU surface wiring, input focus, scrollback overlay, and render wake flow.
+ * Reason: keep widget internals behind one boring widget owner.
+ */
 public final class TerminalWidget {
     private static final String TAG = "howl.term.runtime";
 
@@ -50,6 +54,7 @@ public final class TerminalWidget {
     private int lastOverlayOffset;
     private long lastOverlayRefreshMs;
 
+    /** Construct one terminal widget runtime from host config and launch inputs. */
     public TerminalWidget(Config cfg, ShellLaunch shellLaunch) {
         if (cfg == null) throw new IllegalArgumentException("config required");
         if (shellLaunch == null) throw new IllegalArgumentException("shellLaunch required");
@@ -101,6 +106,7 @@ public final class TerminalWidget {
         this.lastOverlayRefreshMs = 0L;
     }
 
+    /** Build and return the widget view hierarchy for one activity host. */
     public android.view.View view(android.app.Activity activity) {
         final int fontPx = Math.max(8, Math.round(cfg.term.fontSizeSp * activity.getResources().getDisplayMetrics().density));
         final int cellW = Math.max(4, fontPx / 2);
@@ -339,12 +345,14 @@ public final class TerminalWidget {
         return container;
     }
 
+    /** Forward host pause to the underlying GL surface. */
     public void onPause() {
         final android.view.View view = surfaceView;
         final android.opengl.GLSurfaceView gl = glView;
         if (gl != null) gl.onPause();
     }
 
+    /** Forward host resume to the underlying GL surface and queue a redraw. */
     public void onResume() {
         final android.opengl.GLSurfaceView gl = glView;
         if (gl != null) {
@@ -353,14 +361,17 @@ public final class TerminalWidget {
         }
     }
 
+    /** Return the current IME anchor view for host chrome. */
     public android.view.View imeAnchor() {
         return inputView != null ? inputView : surfaceView;
     }
 
+    /** Route one activity key event through widget keyboard policy. */
     public boolean dispatchKeyEvent(android.view.KeyEvent event) {
         return hardwareKeyboard.handleDispatchKeyEvent(event);
     }
 
+    /** Focus the hidden shell input view for IME and hardware keyboard routing. */
     public void focusInput() {
         final ShellInputView input = inputView;
         if (input == null) return;

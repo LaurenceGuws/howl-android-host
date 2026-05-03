@@ -3,7 +3,11 @@ package howl.term;
 import howl.term.window.Ime;
 import howl.term.window.Layout;
 
-/** Android app-window helpers. */
+/**
+ * Responsibility: own the public window/layout surface for the Android host.
+ * Ownership: layout composition and IME coordination.
+ * Reason: keep window leaves behind one boring host owner.
+ */
 public final class Window {
     private final Layout layout;
     private final Ime ime;

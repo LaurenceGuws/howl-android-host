@@ -1,9 +1,14 @@
 package howl.term.input;
 
-/** Gesture leaf for simple swipe-driven bindings. */
+/**
+ * Responsibility: implement swipe-gesture bindings for the host shell.
+ * Ownership: simple directional swipe detection only.
+ * Reason: keep gesture mechanics behind the public input owner.
+ */
 public final class SwipeInput {
     private SwipeInput() {}
 
+    /** Bind a simple upward swipe gesture to one view. */
     public static void bindSwipeUp(android.view.View view, Runnable onSwipe) {
         final float[] downY = new float[] {0f};
         final boolean[] fired = new boolean[] {false};
@@ -23,6 +28,7 @@ public final class SwipeInput {
         });
     }
 
+    /** Bind a simple downward swipe gesture to one view. */
     public static void bindSwipeDown(android.view.View view, Runnable onSwipe) {
         final float[] downY = new float[] {0f};
         final boolean[] fired = new boolean[] {false};
@@ -53,6 +59,7 @@ public final class SwipeInput {
         });
     }
 
+    /** Bind a simple rightward swipe gesture to one view. */
     public static void bindSwipeRight(android.view.View view, Runnable onSwipe) {
         final float[] downX = new float[] {0f};
         final boolean[] fired = new boolean[] {false};
@@ -72,6 +79,7 @@ public final class SwipeInput {
         });
     }
 
+    /** Bind a simple leftward swipe gesture to one view. */
     public static void bindSwipeLeft(android.view.View view, Runnable onSwipe) {
         final float[] downX = new float[] {0f};
         final boolean[] fired = new boolean[] {false};

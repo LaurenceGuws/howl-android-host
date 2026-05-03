@@ -4,14 +4,20 @@ import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 
-/** Owns hardware-keyboard dispatch policy for terminal input on Android. */
+/**
+ * Responsibility: implement hardware-keyboard dispatch policy for terminal input.
+ * Ownership: Android device filtering and host callback routing.
+ * Reason: keep policy details behind the input owner surface.
+ */
 public final class HardwareKeyboardDispatch {
     private final HardwareKeyboard.Host host;
 
+    /** Construct the hardware-keyboard dispatch policy around one host. */
     public HardwareKeyboardDispatch(HardwareKeyboard.Host host) {
         this.host = host;
     }
 
+    /** Decide whether one activity key event should be routed to the terminal host. */
     public boolean handleDispatchKeyEvent(KeyEvent event) {
         if (!shouldHandleHardwareKeyboardEvent(event)) {
             return false;

@@ -2,8 +2,13 @@ package howl.term.input;
 
 import android.view.KeyEvent;
 
-/** Owns hardware-keyboard dispatch for a terminal surface. */
+/**
+ * Responsibility: own hardware-keyboard dispatch for one terminal surface.
+ * Ownership: public hardware-keyboard surface for the input unit.
+ * Reason: keep dispatch policy behind a boring input owner.
+ */
 public final class HardwareKeyboard {
+    /** Host callbacks required by hardware-keyboard dispatch. */
     public interface Host {
         boolean hasHardwareKeyboardTarget();
         boolean handleHardwareKeyEvent(KeyEvent event);
@@ -12,10 +17,12 @@ public final class HardwareKeyboard {
 
     private final HardwareKeyboardDispatch dispatch;
 
+    /** Construct one hardware-keyboard owner for a terminal surface host. */
     public HardwareKeyboard(Host host) {
         this.dispatch = new HardwareKeyboardDispatch(host);
     }
 
+    /** Route one activity key event through hardware-keyboard policy. */
     public boolean handleDispatchKeyEvent(KeyEvent event) {
         return dispatch.handleDispatchKeyEvent(event);
     }

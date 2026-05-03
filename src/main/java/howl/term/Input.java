@@ -2,7 +2,11 @@ package howl.term;
 
 import howl.term.input.SwipeInput;
 
-/** Input gesture helpers for the activity shell. */
+/**
+ * Responsibility: expose the public swipe-input surface for the activity shell.
+ * Ownership: root-level gesture entrypoints only.
+ * Reason: keep gesture leaves behind a boring host owner.
+ */
 public final class Input {
     public Input() {}
 

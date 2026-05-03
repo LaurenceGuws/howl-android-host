@@ -122,10 +122,7 @@ public final class TermInstance {
 
             @Override
             public void onSurfaceChanged(int width, int height) {
-                renderW = Math.max(1, width);
-                renderH = Math.max(1, height);
-                gridW = renderW;
-                gridH = renderH;
+                applyViewportSize(width, height);
                 gpu.ensureTextureSize(gpuState, renderW, renderH);
                 gpu.markFrameReady(gpuState, false);
                 surfaceReady = true;
@@ -309,10 +306,7 @@ public final class TermInstance {
             final int w = r - l;
             final int h = b - t;
             if (w == (orr - ol) && h == (ob - ot)) return;
-            renderW = Math.max(1, w);
-            renderH = Math.max(1, h);
-            gridW = renderW;
-            gridH = renderH;
+            applyViewportSize(w, h);
             gpu.resizeTexture(gpuState, v, renderW, renderH);
             requestRender(v);
         });
@@ -413,6 +407,27 @@ public final class TermInstance {
             return;
         }
         view.post(() -> gpu.requestRender(view));
+    }
+
+    private void applyViewportSize(int width, int height) {
+        final int nextRenderW = Math.max(1, width);
+        final int nextRenderH = Math.max(1, height);
+        final boolean widthChanged = gridW != nextRenderW;
+
+        renderW = nextRenderW;
+        renderH = nextRenderH;
+
+        if (widthChanged || gridW <= 1 || gridH <= 1) {
+            gridW = nextRenderW;
+            gridH = nextRenderH;
+            return;
+        }
+
+        // IME visibility commonly shrinks height without changing width. Keep the
+        // terminal grid stable in that case so the keyboard does not trigger a PTY resize.
+        if (nextRenderH > gridH) {
+            gridH = nextRenderH;
+        }
     }
 
     private void applyScrollDelta(float deltaY) {

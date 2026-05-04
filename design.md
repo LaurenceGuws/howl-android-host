@@ -40,7 +40,7 @@ classDiagram
 ## Ownership Rules
 - `Main` owns activity lifecycle and top-level composition.
 - `Userland` owns readiness, launch resolution, and repair orchestration.
-- `TerminalWidget` owns terminal surface/runtime composition, scrollback overlay, and input focus routing.
+- `TerminalWidget` owns terminal surface/runtime composition, scrollback overlay, input focus routing, and consumption of the exported retained surface handle.
 - `Terminal` owns Java-to-native runtime calls.
 - `Gpu` owns GL surface creation and presentation.
 - `Window` and `Input` own boring host surfaces over their sub-units.
@@ -90,6 +90,7 @@ sequenceDiagram
     TW->>T: configure(...)
     TW->>T: start()
     TW->>T: renderFrameSized(...)
+    TW->>T: surfaceHandle()
     TW->>T: presentAck()
     TW->>G: markFrameReady(...)
 ```
@@ -98,7 +99,7 @@ sequenceDiagram
 - `Userland.resolveLaunch` returns a host launch contract, not a running session.
 - `TerminalWidget.view` builds the runtime view hierarchy and starts GPU/terminal ownership.
 - `Terminal.start` requires native runtime readiness and configured shell input.
-- `Gpu` owns the GL surface contract but not terminal semantics.
+- `Gpu` owns the GL surface contract and presents the exported terminal surface, but not terminal semantics.
 - `Window` and `Input` should stay thin public owners over their units.
 
 ## Non-Goals

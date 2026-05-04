@@ -11,6 +11,21 @@ import howl.term.terminal.RenderTelemetry;
 public final class Terminal {
     private static final String TAG = "howl.term.runtime";
 
+    /** Exported retained surface handle for host composition. */
+    public static final class SurfaceHandle {
+        public final int textureId;
+        public final int width;
+        public final int height;
+        public final long epoch;
+
+        public SurfaceHandle(int textureId, int width, int height, long epoch) {
+            this.textureId = textureId;
+            this.width = width;
+            this.height = height;
+            this.epoch = epoch;
+        }
+    }
+
     /** Bind the terminal native methods onto one target class. */
     public static int bindNativeMethods(Class<?> cls) {
         return BindNativeMethods(cls);
@@ -114,15 +129,25 @@ public final class Terminal {
     }
 
     /** Render one frame with independent render and grid geometry. */
-    public int renderFrameSized(int renderWidth, int renderHeight, int gridWidth, int gridHeight, int texture) {
+    public int renderFrameSized(int renderWidth, int renderHeight, int gridWidth, int gridHeight) {
         if (handle == 0L) return -1;
-        final int rc = NativeBinding.renderFrameSized(handle, renderWidth, renderHeight, gridWidth, gridHeight, texture);
+        final int rc = NativeBinding.renderFrameSized(handle, renderWidth, renderHeight, gridWidth, gridHeight);
         telemetry.onRenderedFrame(handle);
         if (rc < 0) {
             state = State.FAILED;
-            android.util.Log.e(TAG, "terminal.renderFrameSized rc=" + rc + " rw=" + renderWidth + " rh=" + renderHeight + " gw=" + gridWidth + " gh=" + gridHeight + " tex=" + texture);
+            android.util.Log.e(TAG, "terminal.renderFrameSized rc=" + rc + " rw=" + renderWidth + " rh=" + renderHeight + " gw=" + gridWidth + " gh=" + gridHeight);
         }
         return rc;
+    }
+
+    /** Report the current exported retained surface handle. */
+    public SurfaceHandle surfaceHandle() {
+        if (handle == 0L) return new SurfaceHandle(0, 0, 0, 0L);
+        return new SurfaceHandle(
+                NativeBinding.surfaceTextureId(handle),
+                NativeBinding.surfaceWidth(handle),
+                NativeBinding.surfaceHeight(handle),
+                NativeBinding.surfaceEpoch(handle));
     }
 
     /** Acknowledge presentation on the running terminal session. */
@@ -174,6 +199,14 @@ public final class Terminal {
     public int followLiveBottom() {
         if (handle == 0L) return -1;
         return NativeBinding.followLiveBottom(handle);
+    }
+
+    /** Set the active renderer font size in pixels. */
+    public int setFontSizePx(int fontSizePx) {
+        if (handle == 0L) return -1;
+        final int rc = NativeBinding.setFontSizePx(handle, fontSizePx);
+        if (rc < 0) android.util.Log.e(TAG, "terminal.setFontSizePx rc=" + rc + " px=" + fontSizePx);
+        return rc;
     }
 
     /** Report whether the native terminal runtime is still alive. */

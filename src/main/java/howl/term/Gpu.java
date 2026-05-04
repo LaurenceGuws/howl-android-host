@@ -9,34 +9,30 @@ import java.nio.FloatBuffer;
 
 /**
  * Responsibility: own the public GPU surface for the Android host.
- * Ownership: GL surface creation, texture management, and present flow.
+ * Ownership: GL surface creation and present flow for the exported terminal surface.
  * Reason: keep GL details behind one boring host owner.
  */
 public final class Gpu {
     private static final String TAG = "howl.term.runtime";
     /** Mutable GL state carried across surface callbacks. */
     public static final class State {
-        public int texture;
+        public int presentedTexture;
         public int program;
         public int posHandle;
         public int uvHandle;
         public int samplerHandle;
         public FloatBuffer quad;
-        public int textureWidth;
-        public int textureHeight;
         public boolean frameReady;
         public int drawSkipLogs;
 
         /** Construct one zeroed GL state holder. */
         public State() {
-            texture = 0;
+            presentedTexture = 0;
             program = 0;
             posHandle = -1;
             uvHandle = -1;
             samplerHandle = -1;
             quad = null;
-            textureWidth = 1;
-            textureHeight = 1;
             frameReady = false;
             drawSkipLogs = 0;
         }
@@ -58,7 +54,6 @@ public final class Gpu {
         view.setRenderer(new GLSurfaceView.Renderer() {
             @Override
             public void onSurfaceCreated(javax.microedition.khronos.opengles.GL10 gl, javax.microedition.khronos.egl.EGLConfig cfg) {
-                initTexture(state);
                 GLES20.glClearColor(0.06f, 0.09f, 0.14f, 1.0f);
                 hooks.onSurfaceCreated();
             }
@@ -91,48 +86,9 @@ public final class Gpu {
         if (v instanceof GLSurfaceView gl) gl.requestRender();
     }
 
-    /** Queue one texture resize on the GL thread. */
-    public void resizeTexture(State state, android.view.View v, int width, int height) {
-        if (!(v instanceof GLSurfaceView gl)) return;
-        final int w = Math.max(1, width);
-        final int h = Math.max(1, height);
-        gl.queueEvent(() -> ensureTextureSize(state, w, h));
-    }
-
-    /** Return the current texture handle. */
-    public int texture(State state) { return state.texture; }
-
-    /** Ensure the backing texture matches the requested size. */
-    public void ensureTextureSize(State state, int width, int height) {
-        if (state.texture == 0) return;
-        final int w = Math.max(1, width);
-        final int h = Math.max(1, height);
-        if (w == state.textureWidth && h == state.textureHeight) return;
-        state.textureWidth = w;
-        state.textureHeight = h;
-        state.frameReady = false;
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, state.texture);
-        final ByteBuffer zeros = ByteBuffer.allocateDirect(w * h * 4);
-        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, w, h, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, zeros);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-        android.util.Log.i(TAG, "gpu.ensureTextureSize tex=" + state.texture + " " + w + "x" + h);
-    }
-
-    private void initTexture(State state) {
-        if (state.texture != 0) return;
-        final int[] ids = new int[1];
-        GLES20.glGenTextures(1, ids, 0);
-        state.texture = ids[0];
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, state.texture);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
-        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, 1, 1, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, ByteBuffer.wrap(new byte[] {20, 28, 45, (byte) 255}));
-        state.textureWidth = 1;
-        state.textureHeight = 1;
-        state.frameReady = false;
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+    /** Publish the terminal surface texture handle for the next present pass. */
+    public void setPresentedTexture(State state, int textureId) {
+        state.presentedTexture = textureId;
     }
 
     /** Mark whether a fresh frame is ready for present. */
@@ -142,18 +98,18 @@ public final class Gpu {
 
     private void draw(State state) {
         if (state.program == 0) initProgram(state);
-        if (state.program == 0 || state.texture == 0 || !state.frameReady) {
+        if (state.program == 0 || state.presentedTexture == 0 || !state.frameReady) {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-            if (state.texture != 0 && state.drawSkipLogs < 20) {
+            if (state.presentedTexture != 0 && state.drawSkipLogs < 20) {
                 state.drawSkipLogs++;
-                android.util.Log.i(TAG, "gpu.draw skipped program=" + state.program + " frameReady=" + state.frameReady + " tex=" + state.texture);
+                android.util.Log.i(TAG, "gpu.draw skipped program=" + state.program + " frameReady=" + state.frameReady + " tex=" + state.presentedTexture);
             }
             return;
         }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(state.program);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, state.texture);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, state.presentedTexture);
         GLES20.glUniform1i(state.samplerHandle, 0);
         state.quad.position(0);
         GLES20.glEnableVertexAttribArray(state.posHandle);
@@ -201,7 +157,7 @@ public final class Gpu {
         state.quad = ByteBuffer.allocateDirect(verts.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         state.quad.put(verts);
         state.quad.position(0);
-        android.util.Log.i(TAG, "gpu.initProgram ok program=" + state.program + " tex=" + state.texture);
+        android.util.Log.i(TAG, "gpu.initProgram ok program=" + state.program + " tex=" + state.presentedTexture);
     }
 
     private int compile(int type, String src) {

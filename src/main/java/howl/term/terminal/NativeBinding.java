@@ -36,7 +36,8 @@ public final class NativeBinding {
 
     /** Destroy one native terminal runtime handle. */
     public static void destroy(long handle) { Destroy(handle); }
-    public static int renderFrameSized(long handle, int renderWidth, int renderHeight, int gridWidth, int gridHeight, int texture) { return RenderFrameSized(handle, renderWidth, renderHeight, gridWidth, gridHeight, texture); }
+    /** Update the retained native surface for one frame if needed. */
+    public static int renderFrameSized(long handle, int renderWidth, int renderHeight, int gridWidth, int gridHeight) { return RenderFrameSized(handle, renderWidth, renderHeight, gridWidth, gridHeight); }
     public static int publishInputBytes(long handle, byte[] data) { return PublishInputBytes(handle, data); }
     public static int presentAck(long handle) { return PresentAck(handle); }
     public static int waitRenderWake(long handle, int timeoutMs) { return WaitRenderWake(handle, timeoutMs); }
@@ -48,15 +49,21 @@ public final class NativeBinding {
     public static long renderShapedClusters(long handle) { return RenderShapedClusters(handle); }
     public static int renderResolveStage(long handle) { return RenderResolveStage(handle); }
     public static int hasOutputProof(long handle) { return HasOutputProof(handle); }
+    /** Report the exported retained surface handle fields. */
+    public static int surfaceTextureId(long handle) { return SurfaceTextureId(handle); }
+    public static int surfaceWidth(long handle) { return SurfaceWidth(handle); }
+    public static int surfaceHeight(long handle) { return SurfaceHeight(handle); }
+    public static long surfaceEpoch(long handle) { return SurfaceEpoch(handle); }
     public static int currentScrollbackCount(long handle) { return CurrentScrollbackCount(handle); }
     public static int currentScrollbackOffset(long handle) { return CurrentScrollbackOffset(handle); }
     public static int setScrollbackOffset(long handle, int offsetRows) { return SetScrollbackOffset(handle, offsetRows); }
     public static int followLiveBottom(long handle) { return FollowLiveBottom(handle); }
+    public static int setFontSizePx(long handle, int fontSizePx) { return SetFontSizePx(handle, fontSizePx); }
     public static int isSessionAlive(long handle) { return IsSessionAlive(handle); }
 
     private static native long Create(String shell, String command, int cols, int rows, int cellWidth, int cellHeight);
     private static native void Destroy(long handle);
-    private static native int RenderFrameSized(long handle, int renderWidth, int renderHeight, int gridWidth, int gridHeight, int texture);
+    private static native int RenderFrameSized(long handle, int renderWidth, int renderHeight, int gridWidth, int gridHeight);
     private static native int PublishInputBytes(long handle, byte[] data);
     private static native int PresentAck(long handle);
     private static native int WaitRenderWake(long handle, int timeoutMs);
@@ -68,9 +75,14 @@ public final class NativeBinding {
     private static native long RenderShapedClusters(long handle);
     private static native int RenderResolveStage(long handle);
     private static native int HasOutputProof(long handle);
+    private static native int SurfaceTextureId(long handle);
+    private static native int SurfaceWidth(long handle);
+    private static native int SurfaceHeight(long handle);
+    private static native long SurfaceEpoch(long handle);
     private static native int CurrentScrollbackCount(long handle);
     private static native int CurrentScrollbackOffset(long handle);
     private static native int SetScrollbackOffset(long handle, int offsetRows);
     private static native int FollowLiveBottom(long handle);
+    private static native int SetFontSizePx(long handle, int fontSizePx);
     private static native int IsSessionAlive(long handle);
 }

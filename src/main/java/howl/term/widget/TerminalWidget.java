@@ -40,7 +40,7 @@ public final class TerminalWidget {
     private volatile android.view.View scrollThumbView;
     private volatile android.widget.TextView liveChipView;
 
-    private int texture;
+    private volatile Terminal.SurfaceHandle surfaceHandle;
     private Thread wakeThread;
     private long lastFrameLogMs;
     private long lastWakeLogMs;
@@ -49,6 +49,9 @@ public final class TerminalWidget {
     private boolean scrollFlingScheduled;
     private int scrollFlingLastY;
     private float scrollRemainderRows;
+    private int fontSizePx;
+    private volatile int requestedFontSizePx;
+    private int appliedFontSizePx;
     private int cellHeightPx;
     private int lastOverlayCount;
     private int lastOverlayOffset;
@@ -91,7 +94,7 @@ public final class TerminalWidget {
         this.scrollTrackView = null;
         this.scrollThumbView = null;
         this.liveChipView = null;
-        this.texture = 0;
+        this.surfaceHandle = new Terminal.SurfaceHandle(0, 0, 0, 0L);
         this.wakeThread = null;
         this.lastFrameLogMs = 0L;
         this.lastWakeLogMs = 0L;
@@ -100,6 +103,9 @@ public final class TerminalWidget {
         this.scrollFlingScheduled = false;
         this.scrollFlingLastY = 0;
         this.scrollRemainderRows = 0f;
+        this.fontSizePx = 24;
+        this.requestedFontSizePx = 24;
+        this.appliedFontSizePx = 0;
         this.cellHeightPx = 24;
         this.lastOverlayCount = -1;
         this.lastOverlayOffset = -1;
@@ -108,7 +114,12 @@ public final class TerminalWidget {
 
     /** Build and return the widget view hierarchy for one activity host. */
     public android.view.View view(android.app.Activity activity) {
-        final int fontPx = Math.max(8, Math.round(cfg.term.fontSizeSp * activity.getResources().getDisplayMetrics().density));
+        final int fontPx = Math.max(12, Math.round(android.util.TypedValue.applyDimension(
+                android.util.TypedValue.COMPLEX_UNIT_SP,
+                cfg.term.fontSizeSp,
+                activity.getResources().getDisplayMetrics())));
+        this.fontSizePx = fontPx;
+        this.requestedFontSizePx = fontPx;
         final int cellW = Math.max(4, fontPx / 2);
         final int cellH = fontPx;
         this.cellHeightPx = cellH;
@@ -119,9 +130,10 @@ public final class TerminalWidget {
         final android.view.View gl = gpu.createSurface(activity, gpuState, new Gpu.Hooks() {
             @Override
             public void onSurfaceCreated() {
-                texture = gpu.texture(gpuState);
+                surfaceHandle = new Terminal.SurfaceHandle(0, 0, 0, 0L);
+                gpu.setPresentedTexture(gpuState, 0);
                 gpu.markFrameReady(gpuState, false);
-                android.util.Log.i(TAG, "termInst.surfaceCreated tex=" + texture);
+                android.util.Log.i(TAG, "termInst.surfaceCreated");
                 term.configure(shellLaunch.shell, shellLaunch.command);
                 running = term.start();
                 if (running) {
@@ -147,10 +159,9 @@ public final class TerminalWidget {
             @Override
             public void onSurfaceChanged(int width, int height) {
                 applyViewportSize(width, height);
-                gpu.ensureTextureSize(gpuState, renderW, renderH);
                 gpu.markFrameReady(gpuState, false);
                 surfaceReady = true;
-                android.util.Log.i(TAG, "termInst.surfaceChanged render=" + renderW + "x" + renderH + " grid=" + gridW + "x" + gridH + " tex=" + texture);
+                android.util.Log.i(TAG, "termInst.surfaceChanged render=" + renderW + "x" + renderH + " grid=" + gridW + "x" + gridH);
                 requestRender(ref[0]);
             }
 
@@ -164,12 +175,26 @@ public final class TerminalWidget {
                     stop();
                     return;
                 }
-                final int rc = term.renderFrameSized(renderW, renderH, gridW, gridH, texture);
+                if (appliedFontSizePx != requestedFontSizePx) {
+                    final int sizeRc = term.setFontSizePx(requestedFontSizePx);
+                    if (sizeRc < 0) {
+                        gpu.markFrameReady(gpuState, false);
+                        android.util.Log.e(TAG, "termInst.applyFontSize failed rc=" + sizeRc + " px=" + requestedFontSizePx);
+                        return;
+                    }
+                    appliedFontSizePx = requestedFontSizePx;
+                }
+                final long renderStartMs = android.os.SystemClock.uptimeMillis();
+                final int rc = term.renderFrameSized(renderW, renderH, gridW, gridH);
+                final long renderEndMs = android.os.SystemClock.uptimeMillis();
                 if (rc < 0) {
                     gpu.markFrameReady(gpuState, false);
                     android.util.Log.e(TAG, "renderFrameSized failed rc=" + rc + " state=" + term.state());
                     return;
                 }
+                final Terminal.SurfaceHandle nextSurface = term.surfaceHandle();
+                surfaceHandle = nextSurface;
+                gpu.setPresentedTexture(gpuState, nextSurface.textureId);
                 final int ack = term.presentAck();
                 if (ack < 0) {
                     gpu.markFrameReady(gpuState, false);
@@ -182,7 +207,7 @@ public final class TerminalWidget {
                 if (now - lastFrameLogMs > 1000) {
                     lastFrameLogMs = now;
                     final long inputToFrameMs = (inputAt > 0L && inputAt <= now) ? (now - inputAt) : -1L;
-                    android.util.Log.i(TAG, "termInst.frame ok rw=" + renderW + " rh=" + renderH + " tex=" + texture + " inputToFrameMs=" + inputToFrameMs + " queued=" + renderQueued.get());
+                    android.util.Log.i(TAG, "termInst.frame ok rw=" + renderW + " rh=" + renderH + " tex=" + nextSurface.textureId + " epoch=" + nextSurface.epoch + " surface=" + nextSurface.width + "x" + nextSurface.height + " fontPx=" + fontSizePx + " renderMs=" + (renderEndMs - renderStartMs) + " inputToFrameMs=" + inputToFrameMs + " queued=" + renderQueued.get());
                 }
                 if (now - lastOverlayRefreshMs > 250) {
                     lastOverlayRefreshMs = now;
@@ -257,7 +282,32 @@ public final class TerminalWidget {
                         return true;
                     }
                 });
-        gl.setOnTouchListener((v, e) -> gestureDetector.onTouchEvent(e));
+        final android.view.ScaleGestureDetector scaleDetector = new android.view.ScaleGestureDetector(activity,
+                new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                    private float startFontPx;
+                    private float startSpan;
+
+                    @Override
+                    public boolean onScaleBegin(android.view.ScaleGestureDetector detector) {
+                        startFontPx = fontSizePx;
+                        startSpan = Math.max(detector.getCurrentSpan(), 1f);
+                        stopScrollFling();
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onScale(android.view.ScaleGestureDetector detector) {
+                        final float currentSpan = Math.max(detector.getCurrentSpan(), 1f);
+                        final float scale = currentSpan / startSpan;
+                        final int target = Math.max(12, Math.min(72, Math.round(startFontPx * scale)));
+                        return applyFontSizePx(target);
+                    }
+                });
+        gl.setOnTouchListener((v, e) -> {
+            final boolean scaled = scaleDetector.onTouchEvent(e);
+            final boolean gestured = gestureDetector.onTouchEvent(e);
+            return scaled || gestured;
+        });
 
         final android.widget.FrameLayout container = new android.widget.FrameLayout(activity);
         container.addView(gl, new android.widget.FrameLayout.LayoutParams(
@@ -331,7 +381,6 @@ public final class TerminalWidget {
             final int h = b - t;
             if (w == (orr - ol) && h == (ob - ot)) return;
             applyViewportSize(w, h);
-            gpu.resizeTexture(gpuState, v, renderW, renderH);
             requestRender(v);
         });
 
@@ -457,6 +506,17 @@ public final class TerminalWidget {
         if (nextRenderH > gridH) {
             gridH = nextRenderH;
         }
+    }
+
+    private boolean applyFontSizePx(int nextFontPx) {
+        final int clamped = Math.max(12, Math.min(72, nextFontPx));
+        if (clamped == fontSizePx) return false;
+        fontSizePx = clamped;
+        requestedFontSizePx = clamped;
+        cellHeightPx = clamped;
+        if (!running) return true;
+        requestRender(glView);
+        return true;
     }
 
     private void applyScrollDelta(float deltaY) {
